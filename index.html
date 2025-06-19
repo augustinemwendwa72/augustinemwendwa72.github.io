@@ -1,0 +1,1784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deriv Digit Analyzer & Trading Bot</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for a clean look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom styles to complement Tailwind */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* bg-gray-900 */
+            color: #d1d5db; /* text-gray-300 */
+        }
+        .card {
+            background-color: #1f2937; /* bg-gray-800 */
+            border: 1px solid #374151; /* border-gray-700 */
+            border-radius: 0.75rem; /* rounded-xl */
+            padding: 1.5rem; /* p-6 */
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .log-message {
+            font-family: 'monospace';
+            font-size: 0.8rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            margin-bottom: 0.25rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .log-error { background-color: #450a0a; color: #fecaca; }
+        .log-success { background-color: #064e3b; color: #d1fae5; }
+        .log-info { background-color: #1e3a8a; color: #dbeafe; }
+        .log-api { background-color: #374151; color: #e5e7eb; }
+
+        /* Blinking animation for status */
+        @keyframes blink {
+            50% { opacity: 0.5; }
+        }
+        .blinking {
+            animation: blink 1s linear infinite;
+        }
+
+        .trade-item {
+            display: grid;
+            /* Updated grid-template-columns: Type, Ref. ID, Buy time, Stake, Result, Total Profit/Loss */
+            grid-template-columns: 0.8fr 1.2fr 1fr 0.8fr 0.7fr 1.2fr;
+            gap: 8px;
+            padding: 8px;
+            border-bottom: 1px solid #374151;
+            align-items: center;
+        }
+        .trade-item:last-child {
+            border-bottom: none;
+        }
+        .trade-header {
+            font-weight: bold;
+            color: #9ca3af; /* gray-400 */
+            text-align: left;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-7xl mx-auto space-y-8">
+        <!-- Header Section -->
+        <header class="text-center">
+            <h1 class="text-3xl md:text-4xl font-bold text-white">Deriv Digit Analyzer & Trading Bot</h1>
+            <p class="text-gray-400 mt-2">Analyze historical digit patterns and automate trades based on predictions.</p>
+        </header>
+        
+        <!-- Login and Account Selection -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="card">
+                <h2 class="text-xl font-semibold text-white mb-4">1. Login</h2>
+                <div class="space-y-4">
+                    <div class="relative">
+                        <input type="password" id="api-token" placeholder="Enter your Deriv API Token" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        <button id="toggle-password" class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-white">
+                            <svg id="eye-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                            </svg>
+                            <svg id="eye-off-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" viewBox="0 0 20 20" fill="currentColor">
+                               <path fill-rule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 10 0 00-4.512 1.074L3.707 2.293zM10 12a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+                                <path d="M2 4.272l.943.943A10.072 10.072 0 00.458 10c1.274 4.057 5.022 7 9.542 7 .848 0 1.67-.11 2.454-.317l.734.734a1 1 0 101.414-1.414L3.414 2.858A1 1 0 002 4.272zM14 10a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                        </button>
+                    </div>
+                     <input type="text" id="app-id" placeholder="Enter Deriv App ID (Optional)" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    <button id="connect-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors">Connect</button>
+                </div>
+            </div>
+            <div class="card">
+                <h2 class="text-xl font-semibold text-white mb-4">2. Status & Account</h2>
+                 <div id="status-indicator" class="flex items-center space-x-3 p-3 rounded-lg bg-gray-900 mb-4">
+                    <div id="status-light" class="w-4 h-4 rounded-full bg-red-500"></div>
+                    <span id="status-text" class="font-semibold text-white">Disconnected</span>
+                </div>
+                <div id="account-selection-card" class="hidden">
+                    <label for="account-select" class="block text-sm font-medium text-gray-300 mb-1">Select Account</label>
+                    <select id="account-select" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"></select>
+                    <div id="account-balance" class="mt-3 text-lg font-bold text-green-400">Balance: ---</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Left Column: Controls -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- Bot Configuration Card -->
+                <div id="bot-controls-card" class="card hidden">
+                    <h2 class="text-xl font-semibold text-white mb-4">3. Bot Configuration</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="total-historical-ticks" class="block text-sm font-medium text-gray-300 mb-1">Total Historical Ticks to Fetch</label>
+                            <select id="total-historical-ticks" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="1000">Last 1,000</option>
+                                <option value="500">Last 500</option>
+                                <option value="2000">Last 2,000</option>
+                                <option value="5000">Last 5,000</option>
+                            </select>
+                        </div>
+                         <div>
+                            <label for="synthetic-index" class="block text-sm font-medium text-gray-300 mb-1">Synthetic Index</label>
+                            <select id="synthetic-index" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="R_100">Volatility 100 Index</option>
+                                <option value="R_75">Volatility 75 Index</option>
+                                <option value="R_50">Volatility 50 Index</option>
+                                <option value="R_25">Volatility 25 Index</option>
+                                <option value="R_10">Volatility 10 Index</option>
+                                <option value="1HZ100V">1HZ100V</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="trade-type" class="block text-sm font-medium text-gray-300 mb-1">Trade Type</label>
+                            <select id="trade-type" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="Bot">Bot (Auto Select)</option>
+                                <option value="DIGITMATCH">Matches</option>
+                                <option value="DIGITDIFF">Differs</option>
+                                <option value="DIGITOVER">Over</option>
+                                <option value="DIGITUNDER">Under</option>
+                                <option value="DIGITODD">Even</option>
+                                <option value="DIGITEVEN">Odd</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="trade-tick-duration" class="block text-sm font-medium text-gray-300 mb-1">Trade Duration (Ticks)</label>
+                            <select id="trade-tick-duration" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="1">1 Tick</option>
+                                <option value="2">2 Ticks</option>
+                                <option value="3">3 Ticks</option>
+                                <option value="4">4 Ticks</option>
+                                <option value="5">5 Ticks</option>
+                            </select>
+                        </div>
+                        <div>
+                             <label for="stake-amount" class="block text-sm font-medium text-gray-300 mb-1">Stake Amount (USD)</label>
+                             <input type="number" id="stake-amount" value="0.35" step="0.01" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <button id="fetch-data-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition-colors">Fetch & Analyze</button>
+                        <div class="flex space-x-4">
+                             <button id="start-bot-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>Start Bot</button>
+                             <button id="stop-bot-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>Stop Bot</button>
+                        </div>
+                    </div>
+                </div>
+                 <!-- Prediction Card -->
+                <div id="prediction-card" class="card hidden">
+                    <h2 class="text-xl font-semibold text-white mb-4">Prediction Model</h2>
+                     <div class="bg-gray-900 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold text-white">Predicted Next Digits/Parity Sequence</h3>
+                        <p id="prediction-sequence" class="text-2xl font-bold text-emerald-400 tracking-widest mt-2">[ ? ? ? ]</p>
+                        <p id="prediction-details" class="text-sm text-gray-400 mt-1">
+                            Predicted Value: --, Confidence: --%, Type: --
+                        </p>
+                    </div>
+                </div>
+                 <!-- Financial Risk Disclaimer -->
+                <div class="card bg-yellow-900/50 border-yellow-700">
+                    <h3 class="font-bold text-yellow-300">Disclaimer: High Financial Risk</h3>
+                    <p class="text-yellow-400 text-sm mt-2">Trading involves substantial risk and is not suitable for all investors. This tool is for educational and experimental purposes. Past performance is not indicative of future results. You are solely responsible for any financial losses.</p>
+                </div>
+            </div>
+
+            <!-- Right Column: Data & Logs -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Digit Analysis Card (1000 Ticks) -->
+                <div class="card">
+                    <h2 class="text-xl font-semibold text-white mb-4">Last Digit Analysis (All Fetched Ticks)</h2>
+                    <p id="analysis-summary-1000" class="text-gray-400 text-sm mb-4">Fetch data to see distribution.</p>
+                    <div id="digit-chart-1000" class="space-y-2"></div>
+                </div>
+
+                <!-- Digit Analysis Card (Custom) -->
+                <div class="card">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold text-white">Last Digit Analysis (Current View)</h2>
+                        <select id="custom-tick-count" class="bg-gray-900 border border-gray-700 text-white rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="10">10 Ticks</option>
+                            <option value="20">20 Ticks</option>
+                            <option value="50">50 Ticks</option>
+                            <option value="100" selected>100 Ticks</option>
+                            <option value="200">200 Ticks</option>
+                            <option value="500">500 Ticks</option>
+                        </select>
+                    </div>
+                    <p id="analysis-summary-custom" class="text-gray-400 text-sm mb-4">Fetch data to see distribution.</p>
+                    <div id="digit-chart-custom" class="space-y-2"></div>
+                </div>
+
+                <!-- Previous Trades Card -->
+                <div class="card">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold text-white">Previous Trades</h2>
+                        <select id="num-trades-to-show" class="bg-gray-900 border border-gray-700 text-white rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="10" selected>Last 10</option>
+                            <option value="50">Last 50</option>
+                            <option value="100">Last 100</option>
+                            <option value="all">All</option>
+                        </select>
+                    </div>
+                    <div id="trade-history-container" class="w-full h-64 bg-gray-900 rounded-lg p-3 overflow-y-auto">
+                        <div class="trade-item trade-header">
+                            <div>Type</div>
+                            <div>Ref. ID</div>
+                            <div>Buy time</div>
+                            <div>Stake</div>
+                            <div>Result</div> <!-- Added Result column -->
+                            <div>Total profit/loss</div>
+                        </div>
+                        <div id="trades-list">
+                            <!-- Trade items will be rendered here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logs Card -->
+                <div class="card">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold text-white">Logs</h2>
+                        <button id="clear-logs-btn" class="bg-gray-600 hover:bg-gray-700 text-white text-sm font-bold py-2 px-3 rounded-lg transition-colors">Clear Logs</button>
+                    </div>
+                    <div id="logs-container" class="w-full h-96 bg-gray-900 rounded-lg p-3 overflow-y-auto"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const connectBtn = document.getElementById('connect-btn');
+        const apiTokenInput = document.getElementById('api-token');
+        const appIdInput = document.getElementById('app-id');
+        const togglePasswordBtn = document.getElementById('toggle-password');
+        const eyeIcon = document.getElementById('eye-icon');
+        const eyeOffIcon = document.getElementById('eye-off-icon');
+
+        const statusLight = document.getElementById('status-light');
+        const statusText = document.getElementById('status-text');
+        const accountSelectionCard = document.getElementById('account-selection-card');
+        const accountSelect = document.getElementById('account-select');
+        const botControlsCard = document.getElementById('bot-controls-card');
+        const accountBalance = document.getElementById('account-balance');
+
+        const totalHistoricalTicksSelect = document.getElementById('total-historical-ticks');
+        const syntheticIndexSelect = document.getElementById('synthetic-index');
+        const tradeTypeSelect = document.getElementById('trade-type');
+        const stakeAmountInput = document.getElementById('stake-amount');
+        const fetchDataBtn = document.getElementById('fetch-data-btn');
+        const startBotBtn = document.getElementById('start-bot-btn');
+        const stopBotBtn = document.getElementById('stop-bot-btn');
+
+        const predictionCard = document.getElementById('prediction-card');
+        const predictionSequence = document.getElementById('prediction-sequence');
+        const predictionDetails = document.getElementById('prediction-details');
+        
+        const analysisSummary1000 = document.getElementById('analysis-summary-1000');
+        const digitChart1000 = document.getElementById('digit-chart-1000');
+        
+        const customTickCountSelect = document.getElementById('custom-tick-count');
+        const analysisSummaryCustom = document.getElementById('analysis-summary-custom');
+        const digitChartCustom = document.getElementById('digit-chart-custom');
+
+        const numTradesToShowSelect = document.getElementById('num-trades-to-show');
+        const tradesList = document.getElementById('trades-list');
+
+        const logsContainer = document.getElementById('logs-container');
+        const clearLogsBtn = document.getElementById('clear-logs-btn');
+        const tradeTickDurationSelect = document.getElementById('trade-tick-duration');
+
+        // --- State Variables ---
+        let websocket;
+        let isAuthenticated = false;
+        let isBotRunning = false;
+        let tickHistory = [];
+        let allTickHistory = []; // Stores all historical ticks as they come in + live ticks
+        let tradeHistory = [];
+        let lastContractId = null;
+        let accounts = [];
+        let pingInterval;
+        let currentApiToken = '';
+        let currentProposal = null;
+        let isWaitingForTradeOutcome = false; // New flag to control trade cycle
+
+        let totalTicksToFetch = 1000;
+        let fetchedTicksCount = 0;
+        let lastFetchedTimestamp = null;
+        let isFetchingHistoricalTicks = false;
+        let historyFetchReqId = 0;
+        let profitTableReqId = 0;
+
+        let lastDiffTradeTimestamp = 0; // Cooldown for DIGITDIFF trades
+
+        const DEFAULT_DERIV_APP_ID = 65499;
+        const PING_INTERVAL_MS = 20000;
+        const MAX_TICKS_PER_API_CALL = 1000;
+        const MAX_PROFIT_TABLE_LIMIT = 250; // This is a hard limit by Deriv API, not configurable by dropdown directly.
+        const CONFIDENCE_THRESHOLD_EVEN_ODD = 51; // New threshold for Even/Odd
+        const CONFIDENCE_THRESHOLD_OVER_UNDER = 62.5; // New threshold for Over/Under
+        const DIFF_TRADE_COOLDOWN_MS = 15000; // 15 seconds cooldown for DIGITDIFF trades
+
+        // --- WebSocket Logic ---
+        // --- Begin: Differs Martingale Logic (GLOBAL SCOPE) ---
+        let differsMartingaleActive = false;
+        let differsMartingaleCount = 0;
+        let differsMartingaleInitialStake = null;
+        let differsMartingaleShouldTrigger = false;
+        let differsMartingaleConsecWins = 0;
+        let differsMartingaleWaiting = false;
+        let LowPercentage = false;
+
+        let martingaleNow = false;
+
+        let prediction_output = {};
+        let MA = 0;
+        let LA = 0;
+        let AP = 0;
+        
+        // Listen for trade results to trigger martingale
+        function handleDiffersMartingale(trade) {
+            // Only care about DIGITDIFF trades at initial stake
+            if (
+                trade.type === 'DIGITDIFF' &&
+                parseFloat(trade.stake) === parseFloat(differsMartingaleInitialStake)
+            ) {
+                if (differsMartingaleWaiting) {
+                    // We're waiting for 2 consecutive wins before triggering martingale
+                    if (trade.result === 'Won') {
+                        differsMartingaleConsecWins++;
+                        if (differsMartingaleConsecWins >= 2) {
+                            differsMartingaleActive = true;
+                            differsMartingaleCount = 0;
+                            differsMartingaleShouldTrigger = true;
+                            differsMartingaleWaiting = false;
+                            logMessage('DIGITDIFF Martingale: 2 consecutive wins detected. Next 4 trades will use 4x stake.', 'info');
+                        }
+                    } else {
+                        // Reset win counter if a loss occurs
+                        differsMartingaleConsecWins = 0;
+                    }
+                } else if (
+                    trade.result === 'Lost' &&
+                    !differsMartingaleActive &&
+                    !differsMartingaleWaiting
+                ) {
+                    // After a loss at initial stake, start waiting for 2 consecutive wins
+                    differsMartingaleWaiting = true;
+                    differsMartingaleConsecWins = 0;
+                    logMessage('DIGITDIFF Martingale: Loss detected at initial stake. Waiting for 2 consecutive wins before triggering martingale.', 'info');
+                }
+            }
+            // Log martingale state variables
+            logMessage(
+                `Martingale State: Active=${differsMartingaleActive}, Count=${differsMartingaleCount}, InitialStake=${differsMartingaleInitialStake}, ShouldTrigger=${differsMartingaleShouldTrigger}, ConsecWins=${differsMartingaleConsecWins}, Waiting=${differsMartingaleWaiting}`,
+                'info'
+            );
+        }
+
+        // Listen for trade results to trigger martingale
+        // Call handleDiffersMartingale when a transaction with result outcome is received
+        const origHandleMessage = handleMessage;
+        handleMessage = function(data) {
+            origHandleMessage(data);
+
+            // Only process for profit_table updates (trade results)
+            if (data.msg_type === 'profit_table' && data.profit_table && data.profit_table.transactions && data.profit_table.transactions.length > 0) {
+                const latestTrade = data.profit_table.transactions[0];
+                // Map to trade object format expected by handleDiffersMartingale
+                let tradeObj = {
+                    type: latestTrade.shortcode.match(/DIGIT(MATCH|DIFF|OVER|UNDER|ODD|EVEN)/)?.[0] || 'Unknown',
+                    stake: parseFloat(latestTrade.buy_price),
+                    result: (parseFloat(latestTrade.sell_price) === 0) ? 'Lost' : 'Won'
+                };
+                handleDiffersMartingale(tradeObj);
+            }
+        };
+        
+        // Patch renderTradeHistory to check for DIGITDIFF martingale trigger
+        const origRenderTradeHistory = renderTradeHistory;
+        renderTradeHistory = function() {
+            origRenderTradeHistory();
+            // Check the most recent trade for martingale trigger
+            if (tradeHistory.length > 0 && tradeTypeSelect.value === 'DIGITDIFF') {
+                handleDiffersMartingale(tradeHistory[0]);
+            }
+        };
+        
+        // Patch startBot to record initial stake for martingale
+        const origStartBot = startBot;
+        startBot = function() {
+            differsMartingaleInitialStake = parseFloat(stakeAmountInput.value);
+            differsMartingaleActive = false;
+            differsMartingaleCount = 0;
+            differsMartingaleShouldTrigger = false;
+            differsMartingaleConsecWins = 0;
+            differsMartingaleWaiting = false;
+            origStartBot();
+        };
+        
+        // Patch stopBot to reset martingale state
+        const origStopBot = stopBot;
+        stopBot = function() {
+            differsMartingaleActive = false;
+            differsMartingaleCount = 0;
+            differsMartingaleShouldTrigger = false;
+            differsMartingaleConsecWins = 0;
+            differsMartingaleWaiting = false;
+            origStopBot();
+        };
+        
+        // Patch requestTradeProposal to apply martingale stake logic
+        const origRequestTradeProposal = requestTradeProposal;
+        requestTradeProposal = function() {
+            // If not DIGITDIFF or not active, just call original
+            if (tradeTypeSelect.value !== 'DIGITDIFF' || !differsMartingaleActive) {
+                origRequestTradeProposal();
+                return;
+            }
+        
+            // If in martingale mode, use 4x stake for next 4 trades
+            if (differsMartingaleActive && differsMartingaleCount < 4) {
+                // Temporarily override stake input value
+                const prevStake = stakeAmountInput.value;
+                stakeAmountInput.value = (4 * differsMartingaleInitialStake).toFixed(2);
+                origRequestTradeProposal();
+                stakeAmountInput.value = prevStake;
+                differsMartingaleCount++;
+                logMessage(`DIGITDIFF Martingale: Trade ${differsMartingaleCount}/4 at 4x stake.`, 'info');
+                // After 4 trades, reset martingale state
+                if (differsMartingaleCount >= 4) {
+                    differsMartingaleActive = false;
+                    differsMartingaleCount = 0;
+                    differsMartingaleShouldTrigger = false;
+                    logMessage('DIGITDIFF Martingale: Completed 4 trades. Stake reset to initial value.', 'info');
+                }
+                return;
+            }
+        
+            // Otherwise, normal proposal
+            origRequestTradeProposal();
+        };
+        // --- End: Differs Martingale Logic ---
+        
+        function connect() {
+            const apiToken = apiTokenInput.value;
+            const appId = appIdInput.value || DEFAULT_DERIV_APP_ID;
+            if (!apiToken) {
+                logMessage('Please enter an API Token.', 'error');
+                return;
+            }
+        
+            currentApiToken = apiToken;
+        
+            logMessage(`Connecting to Deriv with App ID: ${appId}...`, 'info');
+            updateStatus('Connecting...', 'yellow', true);
+            
+            websocket = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${appId}`);
+        
+            websocket.onopen = () => {
+                logMessage('WebSocket connection opened.', 'info');
+                websocket.send(JSON.stringify({ authorize: currentApiToken }));
+                startPinging();
+            };
+            websocket.onmessage = (event) => handleMessage(JSON.parse(event.data));
+            websocket.onclose = () => {
+                resetAppState();
+                stopPinging();
+                logMessage('Connection closed.', 'error');
+            };
+            websocket.onerror = (error) => {
+                stopPinging();
+                logMessage(`WebSocket Error: ${JSON.stringify(error)}`, 'error');
+            };
+        }
+
+        function startPinging() {
+            if (pingInterval) clearInterval(pingInterval);
+            pingInterval = setInterval(() => {
+                if (websocket && websocket.readyState === WebSocket.OPEN) {
+                    websocket.send(JSON.stringify({ ping: 1 }));
+                    logMessage('Sent WebSocket ping.', 'api');
+                }
+            }, PING_INTERVAL_MS);
+            logMessage(`Started pinging every ${PING_INTERVAL_MS / 1000} seconds.`, 'info');
+        }
+
+        function stopPinging() {
+            if (pingInterval) {
+                clearInterval(pingInterval);
+                pingInterval = null;
+                logMessage('Stopped WebSocket pings.', 'info');
+            }
+        }
+
+        function handleMessage(data) {
+            // if (data.msg_type !== 'tick' && data.msg_type !== 'pong') {
+            //     logMessage(`RECV: ${JSON.stringify(data)}`, 'api');
+            // }
+
+            if (data.error) {
+                logMessage(`Error: ${data.error.message}`, 'error');
+                if (data.error.code === 'AuthorizationFailed' || data.error.code === 'InvalidAppID') {
+                    resetAppState();
+                }
+                return;
+            }
+            /**
+             * Pattern-based multi-step prediction.
+             * @param {string[]} digits - Array of last digits as strings.
+             * @param {number} windowSize - Number of digits to use as pattern (default 3).
+             * @param {number} stepsAhead - How many digits ahead to predict (default 3).
+             * @returns {object}
+             */
+            function patternMultiStepPrediction(digits, windowSize = 3, stepsAhead = 3) {
+                if (digits.length <= windowSize + stepsAhead) {
+                    return { nextSequences: [], overCount: 0, underCount: 0, oddCount: 0, evenCount: 0 };
+                }
+                const pattern = digits.slice(-windowSize).join('');
+                const nextSequences = [];
+                for (let i = 0; i <= digits.length - windowSize - stepsAhead; i++) {
+                    const window = digits.slice(i, i + windowSize).join('');
+                    if (window === pattern) {
+                        const seq = digits.slice(i + windowSize, i + windowSize + stepsAhead).map(d => parseInt(d));
+                        if (seq.length === stepsAhead && seq.every(d => !isNaN(d))) {
+                            nextSequences.push(seq);
+                        }
+                    }
+                }
+                let overCount = 0, underCount = 0, oddCount = 0, evenCount = 0;
+                const overBarrier = 3, underBarrier = 6;
+                nextSequences.forEach(seq => {
+                    if (seq.every(d => d > overBarrier)) overCount++;
+                    if (seq.every(d => d < underBarrier)) underCount++;
+                    if (seq.every(d => d % 2 === 0)) evenCount++;
+                    if (seq.every(d => d % 2 !== 0)) oddCount++;
+                });
+                return { nextSequences, overCount, underCount, oddCount, evenCount };
+            }
+            switch (data.msg_type) {
+                case 'authorize':
+                    handleAuthorization(data.authorize);
+                    break;
+                
+                case 'history':
+                    if (data.echo_req.req_id === historyFetchReqId) {
+                        const newPrices = data.history.prices.map(p => p.toString());
+                        const newTimes = data.history.times;
+
+                        allTickHistory.unshift(...newPrices);
+                        fetchedTicksCount += newPrices.length;
+
+                        if (newTimes && newTimes.length > 0) {
+                            lastFetchedTimestamp = newTimes[0];
+                        }
+
+                        logMessage(`Fetched ${newPrices.length} ticks. Total fetched: ${fetchedTicksCount}/${totalTicksToFetch}.`, 'info');
+                        
+                        if (fetchedTicksCount < totalTicksToFetch && newPrices.length > 0) {
+                            logMessage(`Requesting next batch of historical ticks.`, 'info');
+                            setTimeout(requestNextHistoryBatch, 500);
+                        } else {
+                            logMessage(`--- END Historical Tick Data Fetch (Total: ${allTickHistory.length}) ---`, 'info');
+                            isFetchingHistoricalTicks = false;
+                            fetchDataBtn.disabled = false;
+                            updateStatus(`Logged in as ${accountSelect.value}`, 'green');
+                            tickHistory = allTickHistory.slice(-totalTicksToFetch);
+                            logMessage('Historical data fetched. Running initial full analysis.', 'info');
+                            runFullAnalysis(); // Run full analysis once historical data is fully fetched
+                            subscribeToTicks(syntheticIndexSelect.value);
+                        }
+                    }
+                    break;
+                    
+                case 'tick':
+                    if (allTickHistory.length > 0) {
+                        logMessage(`New tick received. Live value: ${data.tick.quote}. Updating analysis charts.`, 'info');
+                        // Always update tickHistory and run custom analysis for live chart updates
+                        allTickHistory.push(data.tick.quote.toString());
+                        if (allTickHistory.length > totalTicksToFetch) allTickHistory.shift(); 
+                        tickHistory = allTickHistory.slice(-totalTicksToFetch);
+                        runCustomAnalysis(); // Update the custom chart
+
+                        // Only run full analysis and attempt new predictions if the bot is not active
+                        // The bot's trade cycle (requestTradeProposal) will call runFullAnalysis when needed.
+                        if (!isBotRunning) {
+                            logMessage('Bot is OFF. Running full analysis on new tick for manual observation.', 'info');
+                            runFullAnalysis(); // Update prediction model for manual mode
+                        } else {
+                            // If bot is running, only request a trade proposal if no trade is currently pending
+                            if (!isWaitingForTradeOutcome) {
+                                logMessage('Bot is ON. New tick received, and no trade is pending. Requesting trade proposal.', 'info');
+                                requestTradeProposal();
+                            } else {
+                                logMessage('Bot is ON. New tick received, but a trade is already pending. Skipping new proposal.', 'info');
+                            }
+                        }
+                    }
+                    break;
+                
+                case 'proposal':
+                    if (data.proposal) {
+                        currentProposal = data.proposal;
+                        logMessage(`Received Proposal: ID ${currentProposal.id}, Ask Price: ${currentProposal.ask_price}`, 'success');
+                        if (isBotRunning) {
+                            sendBuyOrder(currentProposal.id, currentProposal.ask_price);
+                        }
+                    } else if (data.proposal_open) {
+                        logMessage(`Proposal open (ID: ${data.proposal_open.id}), Current Price: ${data.proposal_open.current_price}`, 'api');
+                    }
+                    break;
+
+                case 'buy':
+                    if (data.buy) {
+                        const contract = data.buy;
+                        logMessage(`Trade placed. Contract ID: ${contract.contract_id}, Payout: ${contract.payout}`, 'success');
+                        lastContractId = contract.contract_id;
+                    }
+                    break;
+
+                case 'transaction':
+                     if (data.transaction && data.transaction.contract_id) {
+                        // Check if this transaction is related to our last placed trade
+                        if (data.transaction.contract_id === lastContractId) {
+                            logMessage(`Transaction for our contract (${data.transaction.contract_id}) detected. Action: ${data.transaction.action}, Status: ${data.transaction.status}`, 'info');
+                            logMessage(`Transaction Details: ${JSON.stringify(data.transaction)}`, 'api');
+                            // Update account balance  
+                            accountBalance.innerHTML = `Balance: <span class="text-blue-400">${data.transaction.balance.toFixed(2)}</span> ${data.transaction.currency}`;
+                            // Only reset isWaitingForTradeOutcome if the contract is clearly concluded (sold or expired)
+                            // The 'sell' or 'payout' action usually indicates conclusion.
+                            // The 'InvalidContract' status on a buy also indicates immediate conclusion (failed buy)
+                             //accountBalance.innerHTML = `Balance: <span class="text-blue-400">${data.balance.toFixed(2)}</span> ${data.currency}`;
+
+                            if (data.transaction.action === 'sell' || data.transaction.action === 'payout' || data.transaction.status === 'InvalidContract') {
+                                isWaitingForTradeOutcome = false; // Mark trade cycle as complete
+                                logMessage(`Contract ${data.transaction.contract_id} concluded. Result will be updated from Profit Table.`, 'success');
+                                if (isBotRunning) {
+                                    logMessage('Trade cycle complete. Waiting for next tick to propose a new trade.', 'info');
+                                }
+                                fetchTradeHistoryFromAPI(); // Refresh profit table immediately
+                            } else if (data.transaction.action === 'buy') {
+                                // This is just a purchase, trade is now open.
+                                logMessage(`Our contract (${data.transaction.contract_id}) was successfully purchased.`, 'info');
+                            }
+                        } else {
+                            // Log other transactions not related to our active bot trade
+                            logMessage(`Received non-bot transaction: ${JSON.stringify(data.transaction)}`, 'api');
+                        }
+                    }
+                    break;
+                
+                case 'profit_table':
+                    if (data.echo_req.req_id === profitTableReqId) {
+                        tradeHistory = data.profit_table.transactions.map(transaction => {
+                            let predictedDisplay = '?';
+                            if (transaction.shortcode.includes('DIGITMATCH') || transaction.shortcode.includes('DIGITDIFF') ||
+                                transaction.shortcode.includes('DIGITOVER') || transaction.shortcode.includes('DIGITUNDER')) {
+                                const barrierMatch = transaction.shortcode.match(/(?:DIGITMATCH|DIGITDIFF|DIGITOVER|DIGITUNDER):(\d)/);
+                                if (barrierMatch && barrierMatch[1]) {
+                                    predictedDisplay = barrierMatch[1];
+                                }
+                            } else if (transaction.shortcode.includes('DIGITODD')) {
+                                predictedDisplay = 'Odd';
+                            } else if (transaction.shortcode.includes('DIGITEVEN')) {
+                                predictedDisplay = 'Even';
+                            }
+
+                            let finalProfit;
+                            let tradeResult;
+
+                            // Determine profit and result based on sell_price and buy_price
+                            if (parseFloat(transaction.sell_price) === 0) {
+                                // If sell_price is 0, it indicates a loss. Profit is negative of the stake.
+                                tradeResult = 'Lost';
+                                finalProfit = -parseFloat(transaction.buy_price);
+                                
+                            } else {
+                                // If sell_price > 0, calculate profit/loss.
+                                finalProfit = parseFloat(transaction.sell_price) - parseFloat(transaction.buy_price);
+                                tradeResult = finalProfit >= 0 ? 'Won' : 'Lost'; // 'Won' if profit >= 0, 'Lost' if negative
+                                }
+
+                            return {
+                                id: transaction.contract_id,
+                                type: transaction.shortcode.match(/DIGIT(MATCH|DIFF|OVER|UNDER|ODD|EVEN)/)?.[0] || 'Unknown',
+                                // predicted is not used in display but kept for data integrity in trade object
+                                predicted: predictedDisplay, 
+                                stake: parseFloat(transaction.buy_price),
+                                profit: finalProfit,
+                                result: tradeResult,
+                                timestamp: new Date(transaction.purchase_time * 1000).toLocaleTimeString(),
+                                purchase_time: transaction.purchase_time
+                            };
+                        });
+                        logMessage(`Fetched ${tradeHistory.length} trades from Profit Table.`, 'info');
+                        renderTradeHistory();
+                        // --- Martingale logic for all trades ---
+                        if (tradeHistory.length > 1) {
+                            const lastTrade = tradeHistory[0];
+                            const prevTrade = tradeHistory[2];
+
+                            // If last trade is a loss, enable martingale
+                            if (lastTrade.result === 'Won' && prevTrade.result === 'Lost') {
+                                martingaleNow = true;
+                                logMessage('Martingale triggered: Last trade was a loss. Next stake will be increased.', 'info');
+                            }
+                            // If previous trade was a loss and last trade is a win, reset martingale
+                            if (prevTrade.result === 'Won' && lastTrade.result === 'Won') {
+                                martingaleNow = false;
+                                logMessage('Martingale reset: Consecutive win after a loss. Stake returns to normal.', 'info');
+                            }
+                        }
+                    }
+                    break;
+            }
+        }
+
+        function handleAuthorization(authData) {
+            isAuthenticated = true;
+            accounts = authData.account_list;
+            updateStatus(`Logged in as ${authData.loginid}`, 'green');
+            logMessage(`Authorization successful. Welcome ${authData.email}.`, 'success');
+
+            accountSelect.innerHTML = '';
+            accounts.forEach(acc => {
+                const option = document.createElement('option');
+                option.value = acc.loginid;
+                option.textContent = `${acc.loginid} (${acc.is_virtual ? 'Virtual' : 'Real'}, ${acc.currency})`;
+                accountSelect.appendChild(option);
+            });
+
+            accountSelect.value = authData.loginid;
+            accountBalance.innerHTML = `Balance: <span class="text-blue-400">${authData.balance.toFixed(2)}</span> ${authData.currency}`;
+            
+            accountSelectionCard.classList.remove('hidden');
+            botControlsCard.classList.remove('hidden');
+            predictionCard.classList.remove('hidden');
+            apiTokenInput.disabled = true;
+            appIdInput.disabled = true;
+            connectBtn.textContent = 'Disconnect';
+            connectBtn.classList.replace('bg-blue-600', 'bg-red-600');
+            connectBtn.classList.replace('hover:bg-blue-700', 'hover:bg-red-700');
+
+            // Initial fetch of trade history upon authorization
+            logMessage('Initial fetch of trade history upon authorization.', 'info');
+            fetchTradeHistoryFromAPI(); 
+
+            // Subscribe to all transactions immediately after authentication
+            // and whenever connection status changes (implicitly via re-auth on re-connect)
+            websocket.send(JSON.stringify({ transaction: 1, subscribe: 1 }));
+            logMessage('Subscribed to transaction stream for continuous updates.', 'info');
+        }
+
+        function subscribeToTicks(symbol) {
+            logMessage(`Subscribing to ticks for ${symbol}...`, 'info');
+            websocket.send(JSON.stringify({ forget_all: 'ticks' }));
+            websocket.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
+        }
+        
+        function fetchData() {
+            if (!isAuthenticated) {
+                logMessage('Please connect first to fetch data.', 'error');
+                return;
+            }
+            if (isFetchingHistoricalTicks) {
+                logMessage('Already fetching historical ticks. Please wait.', 'info');
+                return;
+            }
+
+            const symbol = syntheticIndexSelect.value;
+            totalTicksToFetch = parseInt(totalHistoricalTicksSelect.value);
+
+            logMessage(`Initiating historical data fetch for ${totalTicksToFetch} ticks on ${symbol}.`, 'info');
+            updateStatus('Fetching data...', 'yellow', true);
+
+            allTickHistory = [];
+            fetchedTicksCount = 0;
+            lastFetchedTimestamp = null;
+            isFetchingHistoricalTicks = true;
+            fetchDataBtn.disabled = true;
+            historyFetchReqId++;
+
+            requestNextHistoryBatch();
+        }
+
+        function requestNextHistoryBatch() {
+            const symbol = syntheticIndexSelect.value;
+            const countForThisCall = Math.min(MAX_TICKS_PER_API_CALL, totalTicksToFetch - fetchedTicksCount);
+            
+            if (countForThisCall <= 0) {
+                logMessage(`--- All requested historical ticks (${allTickHistory.length}) fetched. ---`, 'info');
+                isFetchingHistoricalTicks = false;
+                fetchDataBtn.disabled = false;
+                updateStatus(`Logged in as ${accountSelect.value}`, 'green');
+                tickHistory = allTickHistory.slice(-totalTicksToFetch);
+                logMessage('Historical data fully fetched. Running initial full analysis.', 'info');
+                runFullAnalysis(); // Run full analysis once historical data is fully fetched
+                subscribeToTicks(syntheticIndexSelect.value);
+                return;
+            }
+
+            const request = {
+                ticks_history: symbol,
+                end: lastFetchedTimestamp || "latest",
+                count: countForThisCall,
+                style: "ticks",
+                req_id: historyFetchReqId
+            };
+            
+            logMessage(`Fetching historical ticks batch (req_id: ${historyFetchReqId}, count: ${countForThisCall}, end: ${request.end}).`, 'api');
+            websocket.send(JSON.stringify(request));
+        }
+
+        function fetchTradeHistoryFromAPI() {
+            if (!isAuthenticated) {
+                logMessage('Not authenticated. Cannot fetch trade history.', 'error');
+                return;
+            }
+            profitTableReqId++;
+            const selectedLimit = numTradesToShowSelect.value;
+            let limit = MAX_PROFIT_TABLE_LIMIT; // Default to API max limit
+
+            if (selectedLimit !== 'all') {
+                limit = parseInt(selectedLimit);
+            }
+            
+            logMessage(`Requesting Profit Table (limit: ${limit})...`, 'info');
+            websocket.send(JSON.stringify({
+                profit_table: 1,
+                description: 1, // Include shortcode for parsing
+                limit: limit,
+                offset: 0,
+                sort: 'DESC',
+                req_id: profitTableReqId
+            }));
+        }
+
+
+        // --- Helper functions for uniform decimal formatting ---
+function getMaxObservedDecimals(prices) {
+    let maxDecimals = 0;
+    prices.forEach(price => {
+        const parts = price.split('.');
+        if (parts.length === 2) {
+            maxDecimals = Math.max(maxDecimals, parts[1].length);
+        }
+    });
+    return maxDecimals;
+}
+
+function formatPriceForExtraction(price, decimals) {
+    if (typeof price !== 'string') price = price.toString();
+    if (!price.includes('.')) {
+        return price + '.' + '0'.repeat(decimals);
+    }
+    const [intPart, decPart] = price.split('.');
+    return intPart + '.' + decPart.padEnd(decimals, '0');
+}
+
+
+// --- Analysis & Prediction Logic ---
+        function runFullAnalysis() {
+            logMessage('Running full digit analysis and prediction model.', 'info');
+            // Ensure tickHistory always reflects the selected totalHistoricalTicks
+            let maxObservedDecimals = getMaxObservedDecimals(allTickHistory);
+            // logMessage('=====================================================================', 'info');
+            // logMessage('initial price list: ' + JSON.stringify(allTickHistory), 'info');
+            // logMessage('=====================================================================', 'info');
+            
+
+            tickHistory = allTickHistory
+                .slice(-parseInt(totalHistoricalTicksSelect.value))
+                .map(price => formatPriceForExtraction(price, maxObservedDecimals));
+                // logMessage('modified Price List: ' + JSON.stringify(tickHistory), 'info');
+            if (tickHistory.length === 0) {
+                predictionSequence.textContent = '[ ? ? ? ]';
+                predictionDetails.innerHTML = 'Predicted Value: --, Confidence: --%, Type: --';
+                logMessage('Not enough tick history for full analysis. Displaying placeholders.', 'info');
+                return;
+            }
+            
+            // Always update the 'All Fetched Ticks' chart
+            let allFetchedLastDigits = tickHistory.map(price => price.slice(-1));
+
+            // Convert last digits to integers before sending
+            const integerDigits = allFetchedLastDigits.map(d => parseInt(d));
+            let formattedData = JSON.stringify({"data": integerDigits});
+            // Send last digits to local server at http://localhost:5000
+            fetch('http://127.0.0.1:5000/receive', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formattedData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                logMessage('Successfully sent digits to local server.', 'success');
+                logMessage(`Server Response: ${JSON.stringify(data)}`, 'info');
+                prediction_output = JSON.stringify(data);
+                prediction_output = JSON.parse(prediction_output);
+                MA = prediction_output.mostAppearing;
+                LA = prediction_output.smallestNumberAppearing;
+                AP = prediction_output.percentage;
+                logMessage(`Prediction MA: ${MA}`, 'info');
+                logMessage(`Prediction LA: ${LA}`, 'info');
+                logMessage(`Prediction OP: ${AP}`, 'info');
+                logMessage('martingaleNow: ' + martingaleNow, 'info');
+                // logMessage('myStake: ' + myStake, 'info');
+                if(MA > 3 && LA > 3 && AP > 0.3) {
+                    logMessage('time for over trade', 'info');
+                } 
+            })
+            .catch(error => {
+                logMessage(`Error sending digits to local server: ${error}`, 'error');
+            });
+
+
+            analyzeAndDisplay(allFetchedLastDigits, digitChart1000, analysisSummary1000, `Analysis of the last ${allFetchedLastDigits.length} ticks.`, true);
+
+            // Run prediction model based on the current tickHistory subset
+            const analysisLastDigits = tickHistory.map(price => price.slice(-1));
+            const predictionData = runPredictionModel(analysisLastDigits);
+            
+            const selectedTradeType = tradeTypeSelect.value;
+
+            predictionSequence.textContent = `[ ${predictionData.digitSequence.join(' ')} ]`; // Always show the 3-digit sequence
+            logMessage(`Predicted digit sequence: [ ${predictionData.digitSequence.join(' ')} ]`, 'info');
+
+
+            if (selectedTradeType === 'Bot') {
+                let detailsHtml = 'Highest Confidence Trades:<br>';
+                let logDetails = 'Bot Decision Confidences:\n';
+
+                // Use the prediction values from the local server (MA, LA, AP)
+                detailsHtml += `OVER 3 (<span class="text-yellow-300">MA: ${MA}, LA: ${LA}, AP: ${(AP * 100).toFixed(2)}%</span>)<br>`;
+                logDetails += `- OVER 3 (MA: ${MA}, LA: ${LA}, AP: ${(AP * 100).toFixed(2)}%)\n`;
+
+                predictionDetails.innerHTML = detailsHtml;
+                logMessage(logDetails, 'info');
+
+                // Place trade if conditions are met
+                if (MA > 5 && LA > 3 && AP > 0.4 && !LowPercentage) {
+                    logMessage('Bot condition met: Placing OVER 3 trade.', 'success');
+                    // Prepare contract params for OVER 3
+                    const selectedTradeTypeForBot = 'DIGITOVER'; // Always use UNDER for Bot trades
+                    const predictedValue = 2;
+                    const contractTypeSpecificParams = { barrier: 2 };
+                    let myStake = 0;
+                    if(martingaleNow){
+                        myStake = (1 * parseFloat(stakeAmountInput.value)).toFixed(2);
+                        logMessage(`Martingale active: Using 4x stake of ${myStake} for this trade.`, 'info');
+                    } else {
+                        myStake = parseFloat(stakeAmountInput.value).toFixed(2);
+                        logMessage(`Using normal stake of ${myStake} for this trade.`, 'info');
+                    }
+                    const proposalRequest = {
+                        proposal: 1,
+                        amount: parseFloat(myStake),
+                        basis: "stake",
+                        contract_type: selectedTradeTypeForBot,
+                        currency: "USD",
+                        duration: parseInt(tradeTickDurationSelect.value),
+                        duration_unit: "t",
+                        symbol: syntheticIndexSelect.value,
+                        ...contractTypeSpecificParams,
+                        subscribe: 1
+                    };
+
+                    isWaitingForTradeOutcome = true;
+                    websocket.send(JSON.stringify(proposalRequest));
+                } else {
+                    logMessage('Bot condition NOT met: No trade placed.', 'info');
+                    predictionDetails.innerHTML += '<span class="text-yellow-300">No trade placed: Prediction confidence too low.</span>';
+                }
+
+
+
+                    // let allCandidateTrades = [];
+                    // const eligibleTradeTypesForBotDisplay = ['DIGITOVER', 'DIGITUNDER', 'DIGITODD', 'DIGITEVEN'];
+
+                    // eligibleTradeTypesForBotDisplay.forEach(type => {
+                    //     let currentTradeConfidence = 0;
+                    //     let currentTradePredictedValue = null;
+                    //     let isValidSequence = true; 
+
+                    //     if (type === 'DIGITODD') {
+                    //         currentTradePredictedValue = 'Odd';
+                    //         isValidSequence = predictionData.digitSequence.every(d => {
+                    //             const digit = parseInt(d);
+                    //             return !isNaN(digit) && digit % 2 !== 0;
+                    //         });
+                    //         currentTradeConfidence = isValidSequence && (predictionData.totalDigits > 0) ? (predictionData.oddCount / predictionData.totalDigits * 100) : 0;
+                    //     } else if (type === 'DIGITEVEN') {
+                    //         currentTradePredictedValue = 'Even';
+                    //         isValidSequence = predictionData.digitSequence.every(d => {
+                    //             const digit = parseInt(d);
+                    //             return !isNaN(digit) && digit % 2 === 0;
+                    //         });
+                    //         currentTradeConfidence = isValidSequence && (predictionData.totalDigits > 0) ? (predictionData.evenCount / predictionData.totalDigits * 100) : 0;
+                    //     } else if (type === 'DIGITOVER') {
+                    //         const fixedBarrier = 3; // Always over 2
+                    //         currentTradePredictedValue = fixedBarrier;
+                    //         isValidSequence = predictionData.digitSequence.every(d => {
+                    //             const digit = parseInt(d);
+                    //             return !isNaN(digit) && digit > fixedBarrier;
+                    //         });
+                    //         let countOver = 0;
+                    //         if (isValidSequence && predictionData.totalDigits > 0) {
+                    //             for (let i = fixedBarrier + 1; i <= 9; i++) {
+                    //                 countOver += (predictionData.digitFrequencies[i] || 0);
+                    //             }
+                    //             currentTradeConfidence = (countOver / predictionData.totalDigits * 100);
+                    //         } else {
+                    //             currentTradeConfidence = 0;
+                    //         }
+                    //     } else if (type === 'DIGITUNDER') {
+                    //         const fixedBarrier = 6; // Always under 7
+                    //         currentTradePredictedValue = fixedBarrier;
+                    //         isValidSequence = predictionData.digitSequence.every(d => {
+                    //             const digit = parseInt(d);
+                    //             return !isNaN(digit) && digit < fixedBarrier;
+                    //         });
+                    //         let countUnder = 0;
+                    //         if (isValidSequence && predictionData.totalDigits > 0) {
+                    //             for (let i = 0; i < fixedBarrier; i++) {
+                    //                 countUnder += (predictionData.digitFrequencies[i] || 0);
+                    //             }
+                    //             currentTradeConfidence = (countUnder / predictionData.totalDigits * 100);
+                    //         } else {
+                    //             currentTradeConfidence = 0;
+                    //         }
+                    //     }
+                    //     allCandidateTrades.push({ type: type.replace('DIGIT', ''), predictedValue: currentTradePredictedValue, confidence: currentTradeConfidence });
+                    // });
+
+                    // // Sort by confidence descending
+                    // allCandidateTrades.sort((a, b) => b.confidence - a.confidence);
+
+                    // let detailsHtml = 'Highest Confidence Trades:<br>';
+                    // let logDetails = 'Bot Decision Confidences:\n'; // Changed for clarity
+                    // if (allCandidateTrades.length > 0) {
+                    //     allCandidateTrades.forEach(trade => { // Show all eligible trade types and their confidence
+                    //         detailsHtml += `${trade.type} (<span class="text-yellow-300">${trade.predictedValue !== null ? trade.predictedValue : '--'}</span>): <span class="text-yellow-300">${trade.confidence.toFixed(2)}%</span><br>`;
+                    //         logDetails += `- ${trade.type} (${trade.predictedValue !== null ? trade.predictedValue : '--'}): ${trade.confidence.toFixed(2)}% (Threshold: ${trade.type === 'DIGITOVER' || trade.type === 'DIGITUNDER' ? CONFIDENCE_THRESHOLD_OVER_UNDER : CONFIDENCE_THRESHOLD_EVEN_ODD}%)\n`; // For logging with thresholds
+                    //         // logDetails += `- ${trade.type} (${trade.predictedValue !== null ? trade.predictedValue : '--'}): ${trade.confidence.toFixed(2)}% (Threshold: ${trade.type === 'Over' || trade.type === 'Under' ? CONFIDENCE_THRESHOLD_OVER_UNDER : CONFIDENCE_THRESHOLD_EVEN_ODD}%)\n`; // For logging with thresholds
+                    //     });
+                    // } else {
+                    //     detailsHtml += 'No confident trades found.';
+                    //     logDetails += 'No confident trades found.';
+                    // }
+                    // predictionDetails.innerHTML = detailsHtml;
+                    // logMessage(logDetails, 'info'); // Log the highest confidence trades
+
+            }
+            else { // Manual trade type selection (not Bot)
+                let displayPredictedValue = '--';
+                let displayConfidence = 0; 
+                let displayPreferredTradeType = selectedTradeType;
+
+                const predictedDigit = parseInt(predictionData.digitSequence[0]);
+                displayPredictedValue = isNaN(predictedDigit) ? '--' : predictedDigit;
+
+                if (!isNaN(predictedDigit) && predictionData.totalDigits > 0) {
+                    if (selectedTradeType === 'DIGITMATCH') {
+                        displayConfidence = (predictionData.digitFrequencies[predictedDigit] / predictionData.totalDigits * 100);
+                    } else if (selectedTradeType === 'DIGITDIFF') {
+                        displayConfidence = ((predictionData.totalDigits - predictionData.digitFrequencies[predictedDigit]) / predictionData.totalDigits * 100);
+                    } else if (selectedTradeType === 'DIGITOVER') {
+                        const fixedBarrier = 3; // Always over 2 for manual selection
+                        displayPredictedValue = fixedBarrier; // Display fixed barrier
+                        const allPredictedAreOver = predictionData.digitSequence.every(d => {
+                            const digit = parseInt(d);
+                            return !isNaN(digit) && digit > fixedBarrier;
+                        });
+                        if (allPredictedAreOver) {
+                            let countOver = 0;
+                            for (let i = fixedBarrier + 1; i <= 9; i++) {
+                                countOver += (predictionData.digitFrequencies[i] || 0);
+                            }
+                            displayConfidence = (countOver / predictionData.totalDigits * 100);
+                        } else {
+                            displayConfidence = 0;
+                            logMessage(`Warning: For ${selectedTradeType}, not all predicted digits are > ${fixedBarrier}. Confidence set to 0.`, 'info');
+                        }
+                    } else if (selectedTradeType === 'DIGITUNDER') {
+                        const fixedBarrier = 6; // Always under 7 for manual selection
+                        displayPredictedValue = fixedBarrier; // Display fixed barrier
+                         const allPredictedAreUnder = predictionData.digitSequence.every(d => {
+                            const digit = parseInt(d);
+                            return !isNaN(digit) && digit < fixedBarrier;
+                        });
+                        if (allPredictedAreUnder) {
+                            let countUnder = 0;
+                            for (let i = 0; i < fixedBarrier; i++) {
+                                countUnder += (predictionData.digitFrequencies[i] || 0);
+                            }
+                            displayConfidence = (countUnder / predictionData.totalDigits * 100);
+                        } else {
+                            displayConfidence = 0;
+                            logMessage(`Warning: For ${selectedTradeType}, not all predicted digits are < ${fixedBarrier}. Confidence set to 0.`, 'info');
+                        }
+                    } else if (selectedTradeType === 'DIGITODD' || selectedTradeType === 'DIGITEVEN') {
+                         predictedValue = (selectedTradeType === 'DIGITODD' ? 'Odd' : 'Even');
+                         displayPredictedValue = predictedValue;
+                         const allPredictedAreCorrectParity = predictionData.digitSequence.every(d => {
+                            const digit = parseInt(d);
+                            if (isNaN(digit)) return false;
+                            return (selectedTradeType === 'DIGITODD' && digit % 2 !== 0) ||
+                                   (selectedTradeType === 'DIGITEVEN' && digit % 2 === 0);
+                        });
+
+                        if (allPredictedAreCorrectParity && predictionData.totalDigits > 0) {
+                            displayConfidence = (selectedTradeType === 'DIGITODD' ? (predictionData.oddCount / predictionData.totalDigits * 100) : (predictionData.evenCount / predictionData.totalDigits * 100));
+                        } else {
+                            displayConfidence = 0;
+                            logMessage(`Warning: For ${selectedTradeType}, not all predicted digits are of the correct parity. Confidence set to 0.`, 'info');
+                        }
+                    }
+                }
+                predictionDetails.innerHTML = `Predicted Value: <span class="text-yellow-300">${displayPredictedValue}</span>, Confidence: <span class="text-yellow-300">${typeof displayConfidence === 'number' ? displayConfidence.toFixed(2) : displayConfidence}%</span>, Type: ${displayPreferredTradeType.replace('DIGIT', '')}`;
+            }
+            
+            runCustomAnalysis(); // Always run custom analysis to update the second chart
+            startBotBtn.disabled = false;
+        }
+        
+        function runCustomAnalysis() {
+            logMessage('Updating custom tick analysis chart.', 'info');
+            if (tickHistory.length === 0) return;
+            const count = parseInt(customTickCountSelect.value);
+            const customTicks = tickHistory.slice(-count);
+            const lastDigitsCustom = customTicks.map(price => price.slice(-1));
+            
+            analyzeAndDisplay(lastDigitsCustom, digitChartCustom, analysisSummaryCustom, `Analysis of the last ${customTicks.length} ticks.`, false);
+        }
+
+        function analyzeAndDisplay(digits, chartElement, summaryElement, summaryText, isAllTicksChart) {
+            const digitCounts = {};
+            for (let i = 0; i < 10; i++) digitCounts[i] = 0;
+            digits.forEach(digit => digitCounts[digit]++);
+            
+            chartElement.innerHTML = '';
+            summaryElement.textContent = summaryText;
+
+            let percentageSummary = 'Occurrences: ';
+            let minPercentage = Infinity;
+            let maxPercentage = -1;
+            let lowestDigit = -1;
+            let highestDigit = -1;
+
+            if (digits.length > 0) {
+                for (let i = 0; i < 10; i++) {
+                    const count = digitCounts[i] || 0;
+                    const percentage = (count / digits.length) * 100;
+                    
+                    if (percentage < minPercentage) {
+                        minPercentage = percentage;
+                        lowestDigit = i;
+                    }
+                    if (percentage > maxPercentage) {
+                        maxPercentage = percentage;
+                        highestDigit = i;
+                    }
+                }
+            }
+
+
+            for (let i = 0; i < 10; i++) {
+                const count = digitCounts[i] || 0;
+                const percentage = digits.length > 0 ? ((count / digits.length) * 100).toFixed(2) : 0;
+                percentageSummary += `${i}: ${percentage}% `;
+
+                let barColorClass = 'bg-cyan-500'; // Default color
+                if (digits.length > 0) { // Only apply special colors if there's data
+                    if (i === lowestDigit) {
+                        if(i <= 3) LowPercentage = true
+                        else LowPercentage = false
+                        barColorClass = 'bg-red-500';
+                    } else if (i === highestDigit) {
+                        if(i <= 3) LowPercentage = true
+                        else LowPercentage = false
+                        barColorClass = 'bg-green-500';
+                    }
+                }
+                
+                // const barElement = document.createElement('div');
+                // barElement.className = 'flex items-center space-x-3';
+                // barElement.innerHTML = `
+                //     <div class="w-8 font-bold text-lg text-white">${i}</div>
+                //     <div class="flex-1 bg-gray-700 rounded-full h-6">
+                //         <div class="${barColorClass} h-6 rounded-full text-xs font-medium text-blue-900 text-center p-1 leading-none" style="width: ${percentage > 0 ? percentage : 0}%">${percentage > 5 ? percentage+'%' : ''}</div>
+                //     </div>
+                //     <div class="w-16 text-right text-gray-400 text-sm">(${count})</div>
+                // `;
+
+                // Scale the bar width for better visualization
+                const scaledPercentage = Math.min(percentage * 4, 100);
+
+                const barElement = document.createElement('div');
+                barElement.className = 'flex items-center space-x-3';
+                barElement.innerHTML = `
+                    <div class="w-8 font-bold text-lg text-white">${i}</div>
+                    <div class="flex-1 bg-gray-700 rounded-full h-6">
+                        <div class="${barColorClass} h-6 rounded-full text-xs font-medium text-blue-900 text-center p-1 leading-none" style="width: ${scaledPercentage}%">${percentage > 0 ? percentage+'%' : ''}</div>
+                    </div>
+                    <div class="w-16 text-right text-gray-400 text-sm">(${count})</div>
+                `;
+                chartElement.appendChild(barElement);
+            }
+            summaryElement.textContent += ` ${percentageSummary}`;
+        }
+
+        function runPredictionModel(digits) {
+            if (digits.length === 0) {
+                return {
+                    digitSequence: ['?', '?', '?'],
+                    evenOddPrediction: '?',
+                    digitFrequencies: new Array(10).fill(0),
+                    evenCount: 0,
+                    oddCount: 0,
+                    totalDigits: 0
+                };
+            }
+
+            const transitions = {};
+            for (let i = 0; i < 10; i++) {
+                transitions[i] = {};
+                for (let j = 0; j < 10; j++) {
+                    transitions[i][j] = 0;
+                }
+            }
+
+            const digitFrequencies = new Array(10).fill(0);
+            let evenCount = 0;
+            let oddCount = 0;
+            const totalDigits = digits.length;
+
+            digits.forEach(digitStr => {
+                const digit = parseInt(digitStr);
+                if (!isNaN(digit)) {
+                    if (digit % 2 === 0) {
+                        evenCount++;
+                    } else {
+                        oddCount++;
+                    }
+                    digitFrequencies[digit]++;
+                }
+            });
+
+            for (let i = 0; i < digits.length; i++) {
+                if (i < digits.length - 1) {
+                    const currentDigit = parseInt(digits[i]);
+                    const nextDigit = parseInt(digits[i+1]);
+                    if (!isNaN(currentDigit) && !isNaN(nextDigit)) {
+                        transitions[currentDigit][nextDigit]++;
+                    }
+                }
+            }
+
+            let lastKnownDigit = parseInt(digits[digits.length - 1]);
+            if (isNaN(lastKnownDigit)) { 
+                 lastKnownDigit = 0; 
+            }
+
+            const predictedDigitSequence = [];
+            let currentPredictedDigit = lastKnownDigit;
+
+            for (let i = 0; i < 3; i++) {
+                const possibleNext = transitions[currentPredictedDigit];
+                let mostLikelyNext = '?';
+                
+                let maxCount = -1;
+                if (possibleNext && typeof possibleNext === 'object') {
+                    for (const digitKey in possibleNext) {
+                        const count = possibleNext[digitKey];
+                        if (count > maxCount) {
+                            maxCount = count;
+                            mostLikelyNext = digitKey;
+                        }
+                    }
+                }
+
+                if ((maxCount <= 1 && digits.length > 0) || !possibleNext) {
+                    let maxFreq = -1;
+                    for (let digit = 0; digit < digitFrequencies.length; digit++) {
+                        if (digitFrequencies[digit] > maxFreq) {
+                            maxFreq = digitFrequencies[digit];
+                            mostLikelyNext = digit.toString();
+                        }
+                    }
+                }
+                
+                predictedDigitSequence.push(mostLikelyNext);
+                currentPredictedDigit = parseInt(mostLikelyNext);
+                if (isNaN(currentPredictedDigit)) {
+                    currentPredictedDigit = 0; 
+                }
+            }
+
+            const evenOddPrediction = evenCount > oddCount ? 'EVEN' : (oddCount > evenCount ? 'ODD' : '?');
+
+            return {
+                digitSequence: predictedDigitSequence,
+                evenOddPrediction: evenOddPrediction,
+                digitFrequencies: digitFrequencies,
+                evenCount: evenCount,
+                oddCount: oddCount,
+                totalDigits: totalDigits
+            };
+        }
+        
+        // --- Trading Bot Logic ---
+        function startBot() {
+            if (!isAuthenticated || allTickHistory.length === 0) {
+                logMessage('Cannot start bot: Not authenticated or no tick history.', 'error');
+                return;
+            }
+            isBotRunning = true;
+            isWaitingForTradeOutcome = false; // Reset for a fresh start
+            stopBotBtn.disabled = false;
+            startBotBtn.disabled = true;
+            fetchDataBtn.disabled = true;
+            updateStatus('Bot Running', 'cyan', true);
+            logMessage('Bot started. Requesting trade proposal...', 'success');
+            requestTradeProposal(); // Initiate the first trade cycle
+        }
+
+        function stopBot() {
+            isBotRunning = false;
+            isWaitingForTradeOutcome = false; // Reset on stop
+            stopBotBtn.disabled = true;
+            startBotBtn.disabled = false;
+            fetchDataBtn.disabled = false;
+            updateStatus(`Logged in as ${accountSelect.value}`, 'green');
+            logMessage('Bot stopped by user. Updating analysis UI.', 'info');
+            runFullAnalysis(); // Update UI with latest state after stopping bot
+        }
+
+        // Sends a proposal request to the Deriv API
+        function requestTradeProposal() {
+            if (!isBotRunning) {
+                logMessage('Bot is not running. Not requesting trade proposal.', 'info');
+                return;
+            }
+            if (isWaitingForTradeOutcome) {
+                logMessage('Bot is already waiting for a trade outcome. Skipping new proposal request.', 'info');
+                return;
+            }
+            
+            logMessage('Bot: Attempting to find a trade. Current isWaitingForTradeOutcome: ' + isWaitingForTradeOutcome, 'info');
+            runFullAnalysis(); // Re-run full analysis to get the latest prediction based on updated historical ticks
+            
+            const predictionData = runPredictionModel(tickHistory.map(price => price.slice(-1)));
+
+            let selectedTradeType = tradeTypeSelect.value;
+            let predictedValue = null;
+            let contractTypeSpecificParams = {};
+            let tradeConfidence = 0;
+
+            if (selectedTradeType === 'Bot') {
+                // let allCandidateTrades = [];
+                // const eligibleTradeTypesForBot = ['DIGITOVER', 'DIGITUNDER', 'DIGITODD', 'DIGITEVEN'];
+
+                // eligibleTradeTypesForBot.forEach(type => {
+                //     let currentTradeConfidence = 0;
+                //     let currentTradePredictedValue = null;
+                //     let currentTradeContractParams = {};
+                //     let isValidSequence = true; 
+                //     let requiredThreshold = 0;
+
+                //     if (type === 'DIGITODD') {
+                //         requiredThreshold = CONFIDENCE_THRESHOLD_EVEN_ODD;
+                //         currentTradePredictedValue = 'Odd';
+                //         isValidSequence = predictionData.digitSequence.every(d => {
+                //             const digit = parseInt(d);
+                //             return !isNaN(digit) && digit % 2 !== 0;
+                //         });
+                //         currentTradeConfidence = isValidSequence && (predictionData.totalDigits > 0) ? (predictionData.oddCount / predictionData.totalDigits * 100) : 0;
+                //     } else if (type === 'DIGITEVEN') {
+                //         requiredThreshold = CONFIDENCE_THRESHOLD_EVEN_ODD;
+                //         currentTradePredictedValue = 'Even';
+                //         isValidSequence = predictionData.digitSequence.every(d => {
+                //             const digit = parseInt(d);
+                //             return !isNaN(digit) && digit % 2 === 0;
+                //         });
+                //         currentTradeConfidence = isValidSequence && (predictionData.totalDigits > 0) ? (predictionData.evenCount / predictionData.totalDigits * 100) : 0;
+                //     } else if (type === 'DIGITOVER') {
+                //         requiredThreshold = CONFIDENCE_THRESHOLD_OVER_UNDER;
+                //         const fixedBarrier = 3; // Always over 2
+                //         currentTradePredictedValue = fixedBarrier;
+                //         currentTradeContractParams = { barrier: fixedBarrier };
+                //         isValidSequence = predictionData.digitSequence.every(d => {
+                //             const digit = parseInt(d);
+                //             return !isNaN(digit) && digit > fixedBarrier;
+                //         });
+                //         let countOver = 0;
+                //         if (isValidSequence && predictionData.totalDigits > 0) {
+                //             for (let i = fixedBarrier + 1; i <= 9; i++) {
+                //                 countOver += (predictionData.digitFrequencies[i] || 0);
+                //             }
+                //             currentTradeConfidence = (countOver / predictionData.totalDigits * 100);
+                //         } else {
+                //             currentTradeConfidence = 0;
+                //         }
+                //     } else if (type === 'DIGITUNDER') {
+                //         requiredThreshold = CONFIDENCE_THRESHOLD_OVER_UNDER;
+                //         const fixedBarrier = 6; // Always under 7
+                //         currentTradePredictedValue = fixedBarrier;
+                //         currentTradeContractParams = { barrier: fixedBarrier };
+                //         isValidSequence = predictionData.digitSequence.every(d => {
+                //             const digit = parseInt(d);
+                //             return !isNaN(digit) && digit < fixedBarrier;
+                //         });
+                //         let countUnder = 0;
+                //         if (isValidSequence && predictionData.totalDigits > 0) {
+                //             for (let i = 0; i < fixedBarrier; i++) {
+                //                 countUnder += (predictionData.digitFrequencies[i] || 0);
+                //             }
+                //             currentTradeConfidence = (countUnder / predictionData.totalDigits * 100);
+                //         } else {
+                //             currentTradeConfidence = 0;
+                //         }
+                //     }
+
+                //     if (currentTradeConfidence >= requiredThreshold) {
+                //         allCandidateTrades.push({ // Corrected variable name
+                //             type: type, 
+                //             predictedValue: currentTradePredictedValue, 
+                //             confidence: currentTradeConfidence, 
+                //             contractParams: currentTradeContractParams 
+                //         });
+                //     }
+                // });
+
+                // // Sort by confidence descending
+                // allCandidateTrades.sort((a, b) => b.confidence - a.confidence);
+
+                // let detailsHtml = 'Highest Confidence Trades:<br>';
+                // let logDetails = 'Bot Decision Confidences:\n'; // For logging
+                // if (allCandidateTrades.length > 0) {
+                //     allCandidateTrades.forEach(trade => { // Show all eligible trade types and their confidence
+                //         detailsHtml += `${trade.type} (<span class="text-yellow-300">${trade.predictedValue !== null ? trade.predictedValue : '--'}</span>): <span class="text-yellow-300">${trade.confidence.toFixed(2)}%</span><br>`;
+                //         logDetails += `- ${trade.type} (${trade.predictedValue !== null ? trade.predictedValue : '--'}): ${trade.confidence.toFixed(2)}% (Threshold: ${trade.type === 'DIGITOVER' || trade.type === 'DIGITUNDER' ? CONFIDENCE_THRESHOLD_OVER_UNDER : CONFIDENCE_THRESHOLD_EVEN_ODD}%)\n`; // For logging with thresholds
+                //         //logDetails += `- ${trade.type} (${trade.predictedValue !== null ? trade.predictedValue : '--'}): ${trade.confidence.toFixed(2)}% (Threshold: ${trade.type === 'Over' || trade.type === 'Under' ? CONFIDENCE_THRESHOLD_OVER_UNDER : CONFIDENCE_THRESHOLD_EVEN_ODD}%)\n`; // For logging with thresholds
+                //     });
+                // } else {
+                //     detailsHtml += 'No confident trades found.';
+                //     logDetails += 'No confident trades found.';
+                // }
+                // predictionDetails.innerHTML = detailsHtml;
+                // logMessage(logDetails, 'info'); // Log the highest confidence trades
+
+                // if (allCandidateTrades.length > 0) { // Corrected variable name
+                //     const bestTradeToExecute = allCandidateTrades[0]; // Corrected variable name
+                //     selectedTradeType = bestTradeToExecute.type;
+                //     predictedValue = bestTradeToExecute.predictedValue;
+                //     tradeConfidence = bestTradeToExecute.confidence;
+                //     contractTypeSpecificParams = bestTradeToExecute.contractParams;
+
+                //     logMessage(`Bot will attempt to place trade: Type=${selectedTradeType.replace('DIGIT', '')}, Predicted=${predictedValue}, Confidence=${tradeConfidence.toFixed(2)}%, Stake=${stakeAmountInput.value} USD`, 'success');
+                //     isWaitingForTradeOutcome = true; // Set flag when a trade is about to be placed
+                // } else {
+                //     logMessage(`Bot could not find a trade with high enough confidence. Waiting for next tick.`, 'info'); // Changed message
+                //     // Display the message for low confidence on the UI if no trade is placed
+                //     predictionDetails.innerHTML = `No trade placed: Bot confidence too low for all types.`;
+                //     // No setTimeout here; we wait for the next tick for a new proposal attempt
+                //     return; // Exit without sending proposal
+                // }
+
+            } 
+            else { // Manual trade type selection
+                let displayPredictedValueForUI = '--';
+                let displayConfidence = 0; 
+                let displayPreferredTradeType = selectedTradeType;
+
+                const predictedDigit = parseInt(predictionData.digitSequence[0]);
+                displayPredictedValueForUI = isNaN(predictedDigit) ? '--' : predictedDigit;
+
+                if (!isNaN(predictedDigit) && predictionData.totalDigits > 0) {
+                    if (selectedTradeType === 'DIGITMATCH') {
+                        tradeConfidence = (predictionData.digitFrequencies[predictedDigit] / predictionData.totalDigits * 100);
+                        contractTypeSpecificParams = { barrier: predictedDigit };
+                    } else if (selectedTradeType === 'DIGITDIFF') {
+                        if (Date.now() - lastDiffTradeTimestamp < DIFF_TRADE_COOLDOWN_MS) {
+                            const remainingCooldown = Math.ceil((DIFF_TRADE_COOLDOWN_MS - (Date.now() - lastDiffTradeTimestamp)) / 1000);
+                            logMessage(`DIGITDIFF cooldown active. Please wait ${remainingCooldown} seconds before placing another Differs trade.`, 'info');
+                            predictionDetails.innerHTML = `Predicted Value: <span class="text-yellow-300">--</span>, Confidence: <span class="text-yellow-300">--%</span>, Type: Diff (Cooldown)`;
+                            return;
+                        }
+                        tradeConfidence = ((predictionData.totalDigits - predictionData.digitFrequencies[predictedDigit]) / predictionData.totalDigits * 100);
+                        contractTypeSpecificParams = { barrier: predictedDigit };
+                        // lastDiffTradeTimestamp = Date.now(); // <-- Move this to after the trade is actually sent
+                    } else if (selectedTradeType === 'DIGITOVER') {
+                        const fixedBarrier = 3;
+                        displayPredictedValueForUI = fixedBarrier;
+                        predictedValue = fixedBarrier; // Set predictedValue for logging
+                        const allPredictedAreOver = predictionData.digitSequence.every(d => {
+                            const digit = parseInt(d);
+                            return !isNaN(digit) && digit > fixedBarrier;
+                        });
+                        if (allPredictedAreOver) {
+                            contractTypeSpecificParams = { barrier: fixedBarrier };
+                            let countOver = 0;
+                            for (let i = fixedBarrier + 1; i <= 9; i++) {
+                                countOver += (predictionData.digitFrequencies[i] || 0);
+                            }
+                            tradeConfidence = (countOver / predictionData.totalDigits * 100);
+                        } else {
+                            tradeConfidence = 0;
+                            logMessage(`Warning: For ${selectedTradeType}, not all predicted digits are > ${fixedBarrier}. Confidence set to 0.`, 'info');
+                        }
+                    } else if (selectedTradeType === 'DIGITUNDER') {
+                        const fixedBarrier = 6;
+                        displayPredictedValueForUI = fixedBarrier;
+                        predictedValue = fixedBarrier; // Set predictedValue for logging
+                        const allPredictedAreUnder = predictionData.digitSequence.every(d => {
+                            const digit = parseInt(d);
+                            return !isNaN(digit) && digit < fixedBarrier;
+                        });
+                        if (allPredictedAreUnder) {
+                            contractTypeSpecificParams = { barrier: fixedBarrier };
+                            let countUnder = 0;
+                            for (let i = 0; i < fixedBarrier; i++) {
+                                countUnder += (predictionData.digitFrequencies[i] || 0);
+                            }
+                            tradeConfidence = (countUnder / predictionData.totalDigits * 100);
+                        } else {
+                            tradeConfidence = 0;
+                            logMessage(`Warning: For ${selectedTradeType}, not all predicted digits are < ${fixedBarrier}. Confidence set to 0.`, 'info');
+                        }
+                    } else if (selectedTradeType === 'DIGITODD' || selectedTradeType === 'DIGITEVEN') {
+                         predictedValue = (selectedTradeType === 'DIGITODD' ? 'Odd' : 'Even');
+                         displayPredictedValueForUI = predictedValue;
+                         const allPredictedAreCorrectParity = predictionData.digitSequence.every(d => {
+                            const digit = parseInt(d);
+                            if (isNaN(digit)) return false;
+                            return (selectedTradeType === 'DIGITODD' && digit % 2 !== 0) ||
+                                   (selectedTradeType === 'DIGITEVEN' && digit % 2 === 0);
+                        });
+
+                        if (allPredictedAreCorrectParity && predictionData.totalDigits > 0) {
+                            tradeConfidence = (selectedTradeType === 'DIGITODD' ? (predictionData.oddCount / predictionData.totalDigits * 100) : (predictionData.evenCount / predictionData.totalDigits * 100));
+                        } else {
+                            tradeConfidence = 0;
+                            logMessage(`Warning: For ${selectedTradeType}, not all predicted digits are of the correct parity. Confidence set to 0.`, 'info');
+                        }
+                    }
+                }
+                predictionDetails.innerHTML = `Predicted Value: <span class="text-yellow-300">${displayPredictedValueForUI}</span>, Confidence: <span class="text-yellow-300">${typeof tradeConfidence === 'number' ? tradeConfidence.toFixed(2) : displayConfidence}%</span>, Type: ${displayPreferredTradeType.replace('DIGIT', '')}`;
+                const proposalRequest = {
+                proposal: 1,
+                amount: parseFloat(stakeAmountInput.value),
+                basis: "stake", 
+                contract_type: selectedTradeType, 
+                currency: "USD",
+                duration: 1, 
+                duration_unit: "t",
+                symbol: syntheticIndexSelect.value,
+                ...contractTypeSpecificParams,
+                subscribe: 1 
+            };
+            
+            logMessage(`Placing trade: Type=${selectedTradeType.replace('DIGIT', '')}, Predicted=${predictedValue}, Confidence=${typeof tradeConfidence === 'number' ? tradeConfidence.toFixed(2) : tradeConfidence}%, Stake=${stakeAmountInput.value} USD`, 'info');
+            
+            }
+            
+            startBotBtn.disabled = false;
+
+            // If DIGITDIFF, set cooldown timestamp only when actually sending the trade
+            if (selectedTradeType === 'DIGITDIFF') {
+                lastDiffTradeTimestamp = Date.now();
+            }
+            websocket.send(JSON.stringify(proposalRequest));
+        }
+
+        function sendBuyOrder(proposalId, price) {
+            const buyRequest = {
+                buy: proposalId,
+                price: price,
+            };
+
+            logMessage(`Sending BUY order for proposal ID: ${proposalId} at price: ${price}`, 'info');
+            websocket.send(JSON.stringify(buyRequest));
+        }
+
+        function renderTradeHistory() {
+            tradesList.innerHTML = '';
+
+            let tradesToDisplay = tradeHistory;
+            const numToShow = numTradesToShowSelect.value;
+
+            if (numToShow !== 'all') {
+                // Ensure we only slice if there's enough data
+                tradesToDisplay = tradeHistory.slice(0, parseInt(numToShow));
+            }
+
+            if (tradesToDisplay.length === 0) {
+                tradesList.innerHTML = '<div class="text-center text-gray-500 py-4">No trades yet.</div>';
+                return;
+            }
+
+            tradesToDisplay.forEach(trade => {
+                const tradeElement = document.createElement('div');
+                tradeElement.className = 'trade-item';
+                
+                // Determine display for Result and Total Profit/Loss
+                let resultText;
+                let resultColor;
+                let profitText;
+                let profitColor;
+
+                if (trade.result === 'Won') {
+                    resultText = 'Won';
+                    resultColor = 'text-green-500';
+                    profitText = `${trade.profit.toFixed(2)} USD`;
+                    profitColor = 'text-green-500';
+                    
+                } else if (trade.result === 'Lost') {
+                    resultText = 'Lost';
+                    resultColor = 'text-red-500';
+                    profitText = `${trade.profit.toFixed(2)} USD`; // Display negative stake value
+                    profitColor = 'text-red-500';
+                    
+                } else { // Open trades
+                    resultText = 'Open';
+                    resultColor = 'text-yellow-500';
+                    profitText = '---';
+                    profitColor = 'text-gray-300';
+                }
+
+                tradeElement.innerHTML = `
+                    <div class="text-xs text-blue-300">${trade.type.replace('DIGIT', '')}</div>
+                    <div class="text-xs text-gray-400">${trade.id}</div>
+                    <div class="text-xs text-gray-400">${trade.timestamp}</div>
+                    <div class="text-sm text-gray-300">${trade.stake.toFixed(2)}</div>
+                    <div class="text-sm font-bold ${resultColor}">${resultText}</div> <div class="text-sm font-bold ${profitColor}">${profitText}</div>
+                `;
+                tradesList.appendChild(tradeElement);
+            });
+        }
+
+
+        // --- UI & Helper Functions ---
+        function resetAppState() {
+            isAuthenticated = false;
+            isBotRunning = false;
+            isWaitingForTradeOutcome = false; // Reset on app state reset
+            accounts = [];
+            tickHistory = [];
+            allTickHistory = [];
+            tradeHistory = [];
+            currentProposal = null;
+            stopPinging();
+            
+            updateStatus('Disconnected', 'red');
+            apiTokenInput.disabled = false;
+            appIdInput.disabled = false;
+            connectBtn.textContent = 'Connect';
+            connectBtn.classList.replace('bg-blue-600', 'bg-red-600');
+            connectBtn.classList.replace('hover:bg-blue-700', 'hover:bg-red-700');
+            
+            accountSelectionCard.classList.add('hidden');
+            botControlsCard.classList.add('hidden');
+            predictionCard.classList.add('hidden');
+            startBotBtn.disabled = true;
+            stopBotBtn.disabled = true;
+            fetchDataBtn.disabled = false;
+            accountBalance.textContent = 'Balance: ---';
+            
+            digitChart1000.innerHTML = '';
+            analysisSummary1000.textContent = 'Fetch data to see distribution.';
+            digitChartCustom.innerHTML = '';
+            analysisSummaryCustom.textContent = 'Fetch data to see distribution.';
+            predictionSequence.textContent = '[ ? ? ? ]';
+            predictionDetails.innerHTML = 'Predicted Value: --, Confidence: --%, Type: --'; // Use innerHTML for potential spans
+            renderTradeHistory();
+            logMessage('Application state reset.', 'info');
+        }
+
+        function updateStatus(text, color, isBlinking = false) {
+            statusText.textContent = text;
+            statusLight.className = `w-4 h-4 rounded-full bg-${color}-500`;
+            statusLight.classList.toggle('blinking', isBlinking);
+        }
+
+        function logMessage(message, type = 'info') {
+            const logElement = document.createElement('div');
+            logElement.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logElement.className = `log-message log-${type}`;
+            logsContainer.appendChild(logElement);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
+        
+        // --- Event Listeners ---
+        connectBtn.addEventListener('click', () => {
+            if (isAuthenticated) websocket.close();
+            else connect();
+        });
+        
+        togglePasswordBtn.addEventListener('click', () => {
+            const isPassword = apiTokenInput.type === 'password';
+            apiTokenInput.type = isPassword ? 'text' : 'password';
+            eyeIcon.classList.toggle('hidden', isPassword);
+            eyeOffIcon.classList.toggle('hidden', !isPassword);
+        });
+
+        accountSelect.addEventListener('change', () => {
+            const selectedAccountLoginId = accountSelect.value;
+            websocket.send(JSON.stringify({ authorize: currentApiToken, switch_account: selectedAccountLoginId }));
+            logMessage(`Attempting to switch to account ${selectedAccountLoginId}. Waiting for authorization response to update balance.`, 'info');
+        });
+        
+        syntheticIndexSelect.addEventListener('change', () => {
+            if (isAuthenticated) {
+                allTickHistory = [];
+                tickHistory = [];
+                logMessage(`Market changed to ${syntheticIndexSelect.value}. Please 'Fetch & Analyze' for new data.`, 'info');
+                startBotBtn.disabled = true;
+                subscribeToTicks(syntheticIndexSelect.value);
+            }
+        });
+
+        totalHistoricalTicksSelect.addEventListener('change', fetchData);
+        
+        tradeTypeSelect.addEventListener('change', () => {
+            if (isBotRunning) {
+                logMessage('Cannot change trade type while bot is running. Please stop the bot first.', 'error');
+                // Revert selection if bot is running
+                const previousValue = tradeTypeSelect.dataset.previousValue || 'Bot';
+                tradeTypeSelect.value = previousValue;
+            } else {
+                runFullAnalysis(); // Rerun analysis to update prediction display immediately
+                tradeTypeSelect.dataset.previousValue = tradeTypeSelect.value; // Store current value
+            }
+        });
+        // Store initial value
+        tradeTypeSelect.dataset.previousValue = tradeTypeSelect.value;
+
+        fetchDataBtn.addEventListener('click', fetchData);
+        customTickCountSelect.addEventListener('change', runCustomAnalysis);
+        startBotBtn.addEventListener('click', startBot);
+        stopBotBtn.addEventListener('click', stopBot);
+
+        numTradesToShowSelect.addEventListener('change', fetchTradeHistoryFromAPI); // Call fetchTradeHistoryFromAPI on dropdown change
+
+        clearLogsBtn.addEventListener('click', () => {
+            logsContainer.innerHTML = '';
+            logMessage('Logs cleared.', 'info');
+        });
+
+        // --- Initial State ---
+        resetAppState();
+        logMessage("Welcome! Please enter your API token and optional App ID to connect.", 'info');
+
+    </script>
+</body>
+</html>
