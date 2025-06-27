@@ -980,12 +980,12 @@ function formatPriceForExtraction(price, decimals) {
                 logMessage(logDetails, 'info');
 
                 // Place trade if conditions are met
-                if (MA > 5 && LA > 3 && AP > 0.4 && !LowPercentage) {
+                if (MA > 3 && LA > 3 && AP > 0.4 && !LowPercentage) {
                     logMessage('Bot condition met: Placing OVER 3 trade.', 'success');
                     // Prepare contract params for OVER 3
                     const selectedTradeTypeForBot = 'DIGITOVER'; // Always use UNDER for Bot trades
-                    const predictedValue = 3;
-                    const contractTypeSpecificParams = { barrier: 3 };
+                    const predictedValue = 1;
+                    const contractTypeSpecificParams = { barrier: 1};
                     let myStake = 0;
                     let martingaleValue = parseInt(martingaleValueSelect.value) || 1;
                     if(martingaleNow){
