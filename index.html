@@ -130,12 +130,16 @@
                          <div>
                             <label for="synthetic-index" class="block text-sm font-medium text-gray-300 mb-1">Synthetic Index</label>
                             <select id="synthetic-index" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                                <option value="R_100">Volatility 100 Index</option>
-                                <option value="R_75">Volatility 75 Index</option>
-                                <option value="R_50">Volatility 50 Index</option>
-                                <option value="R_25">Volatility 25 Index</option>
                                 <option value="R_10">Volatility 10 Index</option>
-                                <option value="1HZ100V">1HZ100V</option>
+                                <option value="1HZ10V">1HZ 10 Index</option>
+                                <option value="R_25">Volatility 25 Index</option>
+                                <option value="1HZ25V">1HZ 25 Index</option>
+                                <option value="R_50">Volatility 50 Index</option>
+                                <option value="1HZ50V">1HZ 50 Index</option>
+                                <option value="R_75">Volatility 75 Index</option>
+                                <option value="1HZ75V">1HZ 75 Index</option>
+                                <option value="R_100">Volatility 100 Index</option>
+                                <option value="1HZ100V">1HZ 100 Index</option>
                             </select>
                         </div>
                         <div>
@@ -170,6 +174,11 @@
                                 <option value="4">4x</option>
                                 <option value="5">5x</option>
                             </select>
+                        </div>
+                        <div>
+                            <label for="ap-threshold" class="block text-sm font-medium text-gray-300 mb-1">AP Threshold (0.0 - 1.0)</label>
+                            <input type="number" id="ap-threshold" value="0.3" min="0" max="1" step="0.01" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <p class="text-xs text-gray-400 mt-1">Minimum AP (Average Probability) required for bot to place a trade. Default: 0.3</p>
                         </div>
 
                         <div>
@@ -322,6 +331,7 @@
         let currentApiToken = '';
         let currentProposal = null;
         let isWaitingForTradeOutcome = false; // New flag to control trade cycle
+        let isWaitingForTradeProposal = false; // New flag to control proposal request state
 
         let totalTicksToFetch = 1000;
         let fetchedTicksCount = 0;
@@ -329,6 +339,23 @@
         let isFetchingHistoricalTicks = false;
         let historyFetchReqId = 0;
         let profitTableReqId = 0;
+
+        let myClowestDigit = 0;
+        let myChighestDigit = 0;
+        let myAlowestDigit = 0
+        let myAhighestDigit = 0;
+        let lastPercentageCheck = 0;
+
+        let percentageSummary = 'Occurrences: ';
+        let minPercentage = Infinity;
+        let maxPercentage = -1;
+        let lowestDigit = -1;
+        let highestDigit = -1;
+        let LWD = -1;
+        let HWD = -1;
+
+        let pendingTradeCounter = 0; // Counter for pending trades
+        let MAX_PENDING_TRADES = 5; // Maximum allowed pending trades before stopping the bot
 
         let lastDiffTradeTimestamp = 0; // Cooldown for DIGITDIFF trades
 
@@ -356,132 +383,11 @@
         let MA = 0;
         let LA = 0;
         let AP = 0;
-        
-        // Listen for trade results to trigger martingale
-        function handleDiffersMartingale(trade) {
-            // Only care about DIGITDIFF trades at initial stake
-            if (
-                trade.type === 'DIGITDIFF' &&
-                parseFloat(trade.stake) === parseFloat(differsMartingaleInitialStake)
-            ) {
-                if (differsMartingaleWaiting) {
-                    // We're waiting for 2 consecutive wins before triggering martingale
-                    if (trade.result === 'Won') {
-                        differsMartingaleConsecWins++;
-                        if (differsMartingaleConsecWins >= 2) {
-                            differsMartingaleActive = true;
-                            differsMartingaleCount = 0;
-                            differsMartingaleShouldTrigger = true;
-                            differsMartingaleWaiting = false;
-                            logMessage('DIGITDIFF Martingale: 2 consecutive wins detected. Next 4 trades will use 4x stake.', 'info');
-                        }
-                    } else {
-                        // Reset win counter if a loss occurs
-                        differsMartingaleConsecWins = 0;
-                    }
-                } else if (
-                    trade.result === 'Lost' &&
-                    !differsMartingaleActive &&
-                    !differsMartingaleWaiting
-                ) {
-                    // After a loss at initial stake, start waiting for 2 consecutive wins
-                    differsMartingaleWaiting = true;
-                    differsMartingaleConsecWins = 0;
-                    logMessage('DIGITDIFF Martingale: Loss detected at initial stake. Waiting for 2 consecutive wins before triggering martingale.', 'info');
-                }
-            }
-            // Log martingale state variables
-            logMessage(
-                `Martingale State: Active=${differsMartingaleActive}, Count=${differsMartingaleCount}, InitialStake=${differsMartingaleInitialStake}, ShouldTrigger=${differsMartingaleShouldTrigger}, ConsecWins=${differsMartingaleConsecWins}, Waiting=${differsMartingaleWaiting}`,
-                'info'
-            );
-        }
+        let formattedData = JSON.stringify({});
+        let proposalRequest = null;
+        let selectedTradeType = null; // This will be set based on the trade type selected by the user
+        let foundTradeConditions = false;
 
-        // Listen for trade results to trigger martingale
-        // Call handleDiffersMartingale when a transaction with result outcome is received
-        const origHandleMessage = handleMessage;
-        handleMessage = function(data) {
-            origHandleMessage(data);
-
-            // Only process for profit_table updates (trade results)
-            if (data.msg_type === 'profit_table' && data.profit_table && data.profit_table.transactions && data.profit_table.transactions.length > 0) {
-                const latestTrade = data.profit_table.transactions[0];
-                // Map to trade object format expected by handleDiffersMartingale
-                let tradeObj = {
-                    type: latestTrade.shortcode.match(/DIGIT(MATCH|DIFF|OVER|UNDER|ODD|EVEN)/)?.[0] || 'Unknown',
-                    stake: parseFloat(latestTrade.buy_price),
-                    result: (parseFloat(latestTrade.sell_price) === 0) ? 'Lost' : 'Won'
-                };
-                handleDiffersMartingale(tradeObj);
-            }
-        };
-        
-        // Patch renderTradeHistory to check for DIGITDIFF martingale trigger
-        const origRenderTradeHistory = renderTradeHistory;
-        renderTradeHistory = function() {
-            origRenderTradeHistory();
-            // Check the most recent trade for martingale trigger
-            if (tradeHistory.length > 0 && tradeTypeSelect.value === 'DIGITDIFF') {
-                handleDiffersMartingale(tradeHistory[0]);
-            }
-        };
-        
-        // Patch startBot to record initial stake for martingale
-        const origStartBot = startBot;
-        startBot = function() {
-            differsMartingaleInitialStake = parseFloat(stakeAmountInput.value);
-            differsMartingaleActive = false;
-            differsMartingaleCount = 0;
-            differsMartingaleShouldTrigger = false;
-            differsMartingaleConsecWins = 0;
-            differsMartingaleWaiting = false;
-            origStartBot();
-        };
-        
-        // Patch stopBot to reset martingale state
-        const origStopBot = stopBot;
-        stopBot = function() {
-            differsMartingaleActive = false;
-            differsMartingaleCount = 0;
-            differsMartingaleShouldTrigger = false;
-            differsMartingaleConsecWins = 0;
-            differsMartingaleWaiting = false;
-            origStopBot();
-        };
-        
-        // Patch requestTradeProposal to apply martingale stake logic
-        const origRequestTradeProposal = requestTradeProposal;
-        requestTradeProposal = function() {
-            // If not DIGITDIFF or not active, just call original
-            if (tradeTypeSelect.value !== 'DIGITDIFF' || !differsMartingaleActive) {
-                origRequestTradeProposal();
-                return;
-            }
-        
-            // If in martingale mode, use 4x stake for next 4 trades
-            if (differsMartingaleActive && differsMartingaleCount < 4) {
-                // Temporarily override stake input value
-                const prevStake = stakeAmountInput.value;
-                stakeAmountInput.value = (4 * differsMartingaleInitialStake).toFixed(2);
-                origRequestTradeProposal();
-                stakeAmountInput.value = prevStake;
-                differsMartingaleCount++;
-                logMessage(`DIGITDIFF Martingale: Trade ${differsMartingaleCount}/4 at 4x stake.`, 'info');
-                // After 4 trades, reset martingale state
-                if (differsMartingaleCount >= 4) {
-                    differsMartingaleActive = false;
-                    differsMartingaleCount = 0;
-                    differsMartingaleShouldTrigger = false;
-                    logMessage('DIGITDIFF Martingale: Completed 4 trades. Stake reset to initial value.', 'info');
-                }
-                return;
-            }
-        
-            // Otherwise, normal proposal
-            origRequestTradeProposal();
-        };
-        // --- End: Differs Martingale Logic ---
-        
         function connect() {
             const apiToken = apiTokenInput.value;
             const appId = appIdInput.value || DEFAULT_DERIV_APP_ID;
@@ -534,9 +440,6 @@
         }
 
         function handleMessage(data) {
-            // if (data.msg_type !== 'tick' && data.msg_type !== 'pong') {
-            //     logMessage(`RECV: ${JSON.stringify(data)}`, 'api');
-            // }
 
             if (data.error) {
                 logMessage(`Error: ${data.error.message}`, 'error');
@@ -545,38 +448,7 @@
                 }
                 return;
             }
-            /**
-             * Pattern-based multi-step prediction.
-             * @param {string[]} digits - Array of last digits as strings.
-             * @param {number} windowSize - Number of digits to use as pattern (default 3).
-             * @param {number} stepsAhead - How many digits ahead to predict (default 3).
-             * @returns {object}
-             */
-            function patternMultiStepPrediction(digits, windowSize = 3, stepsAhead = 3) {
-                if (digits.length <= windowSize + stepsAhead) {
-                    return { nextSequences: [], overCount: 0, underCount: 0, oddCount: 0, evenCount: 0 };
-                }
-                const pattern = digits.slice(-windowSize).join('');
-                const nextSequences = [];
-                for (let i = 0; i <= digits.length - windowSize - stepsAhead; i++) {
-                    const window = digits.slice(i, i + windowSize).join('');
-                    if (window === pattern) {
-                        const seq = digits.slice(i + windowSize, i + windowSize + stepsAhead).map(d => parseInt(d));
-                        if (seq.length === stepsAhead && seq.every(d => !isNaN(d))) {
-                            nextSequences.push(seq);
-                        }
-                    }
-                }
-                let overCount = 0, underCount = 0, oddCount = 0, evenCount = 0;
-                const overBarrier = 3, underBarrier = 6;
-                nextSequences.forEach(seq => {
-                    if (seq.every(d => d > overBarrier)) overCount++;
-                    if (seq.every(d => d < underBarrier)) underCount++;
-                    if (seq.every(d => d % 2 === 0)) evenCount++;
-                    if (seq.every(d => d % 2 !== 0)) oddCount++;
-                });
-                return { nextSequences, overCount, underCount, oddCount, evenCount };
-            }
+            
             switch (data.msg_type) {
                 case 'authorize':
                     handleAuthorization(data.authorize);
@@ -602,11 +474,22 @@
                         } else {
                             logMessage(`--- END Historical Tick Data Fetch (Total: ${allTickHistory.length}) ---`, 'info');
                             isFetchingHistoricalTicks = false;
-                            fetchDataBtn.disabled = false;
+                            // fetchDataBtn.disabled = false;
                             updateStatus(`Logged in as ${accountSelect.value}`, 'green');
                             tickHistory = allTickHistory.slice(-totalTicksToFetch);
                             logMessage('Historical data fetched. Running initial full analysis.', 'info');
-                            runFullAnalysis(); // Run full analysis once historical data is fully fetched
+                             if(!foundTradeConditions && !isWaitingForTradeProposal && !isWaitingForTradeOutcome){
+                                runFullAnalysis(); // Run full analysis once historical data is fully fetched
+                                runCustomAnalysis(); // Update the custom chart
+                                checkPercentageForTrade(); // Check percentage for trade after full analysis
+                             }
+                             // checkPercentageForTrade(); // Check percentage for trade after full analysis
+                            // if(checkPercentageForTrade()) {
+                            //     logMessage('Trade conditions met. Sending Data to predictor.', 'success');
+                            //     checkPercentageForTrade();
+                            // } else {
+                            //     logMessage('Trade conditions not met. Skipping data send to predictor.', 'warning');
+                            // }
                             subscribeToTicks(syntheticIndexSelect.value);
                         }
                     }
@@ -615,25 +498,12 @@
                 case 'tick':
                     if (allTickHistory.length > 0) {
                         logMessage(`New tick received. Live value: ${data.tick.quote}. Updating analysis charts.`, 'info');
-                        // Always update tickHistory and run custom analysis for live chart updates
-                        allTickHistory.push(data.tick.quote.toString());
-                        if (allTickHistory.length > totalTicksToFetch) allTickHistory.shift(); 
-                        tickHistory = allTickHistory.slice(-totalTicksToFetch);
-                        runCustomAnalysis(); // Update the custom chart
-
-                        // Only run full analysis and attempt new predictions if the bot is not active
-                        // The bot's trade cycle (requestTradeProposal) will call runFullAnalysis when needed.
-                        if (!isBotRunning) {
-                            logMessage('Bot is OFF. Running full analysis on new tick for manual observation.', 'info');
-                            runFullAnalysis(); // Update prediction model for manual mode
-                        } else {
-                            // If bot is running, only request a trade proposal if no trade is currently pending
-                            if (!isWaitingForTradeOutcome) {
-                                logMessage('Bot is ON. New tick received, and no trade is pending. Requesting trade proposal.', 'info');
-                                requestTradeProposal();
-                            } else {
-                                logMessage('Bot is ON. New tick received, but a trade is already pending. Skipping new proposal.', 'info');
-                            }
+                        // // Always update tickHistory and run custom analysis for live chart updates
+                        // allTickHistory.push(data.tick.quote.toString());
+                        // if (allTickHistory.length > totalTicksToFetch) allTickHistory.shift(); 
+                        // tickHistory = allTickHistory.slice(-totalTicksToFetch);
+                        if(!foundTradeConditions && !isWaitingForTradeProposal && !isWaitingForTradeOutcome){
+                            fetchData();
                         }
                     }
                     break;
@@ -655,6 +525,8 @@
                         const contract = data.buy;
                         logMessage(`Trade placed. Contract ID: ${contract.contract_id}, Payout: ${contract.payout}`, 'success');
                         lastContractId = contract.contract_id;
+                        isWaitingForTradeProposal = false
+                        isWaitingForTradeOutcome = true; // Mark that we are waiting for the outcome of this trade
                     }
                     break;
 
@@ -783,7 +655,9 @@
 
             // Initial fetch of trade history upon authorization
             logMessage('Initial fetch of trade history upon authorization.', 'info');
+            
             fetchTradeHistoryFromAPI(); 
+            fetchData();
 
             // Subscribe to all transactions immediately after authentication
             // and whenever connection status changes (implicitly via re-auth on re-connect)
@@ -818,6 +692,7 @@
             lastFetchedTimestamp = null;
             isFetchingHistoricalTicks = true;
             fetchDataBtn.disabled = true;
+            startBotBtn.disabled = false;
             historyFetchReqId++;
 
             requestNextHistoryBatch();
@@ -830,11 +705,12 @@
             if (countForThisCall <= 0) {
                 logMessage(`--- All requested historical ticks (${allTickHistory.length}) fetched. ---`, 'info');
                 isFetchingHistoricalTicks = false;
-                fetchDataBtn.disabled = false;
+                // fetchDataBtn.disabled = false;
                 updateStatus(`Logged in as ${accountSelect.value}`, 'green');
                 tickHistory = allTickHistory.slice(-totalTicksToFetch);
                 logMessage('Historical data fully fetched. Running initial full analysis.', 'info');
                 runFullAnalysis(); // Run full analysis once historical data is fully fetched
+                runCustomAnalysis(); // Update the custom chart
                 subscribeToTicks(syntheticIndexSelect.value);
                 return;
             }
@@ -924,247 +800,26 @@ function formatPriceForExtraction(price, decimals) {
 
             // Convert last digits to integers before sending
             const integerDigits = allFetchedLastDigits.map(d => parseInt(d));
-            let formattedData = JSON.stringify({"data": integerDigits});
-            // Send last digits to local server at http://localhost:5000
-            fetch('http://127.0.0.1:5000/receive', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(formattedData)
-            })
-            .then(response => response.json())
-            .then(data => {
-                logMessage('Successfully sent digits to local server.', 'success');
-                logMessage(`Server Response: ${JSON.stringify(data)}`, 'info');
-                prediction_output = JSON.stringify(data);
-                prediction_output = JSON.parse(prediction_output);
-                MA = prediction_output.mostAppearing;
-                LA = prediction_output.smallestNumberAppearing;
-                AP = prediction_output.percentage;
-                logMessage(`Prediction MA: ${MA}`, 'info');
-                logMessage(`Prediction LA: ${LA}`, 'info');
-                logMessage(`Prediction OP: ${AP}`, 'info');
-                logMessage('martingaleNow: ' + martingaleNow, 'info');
-                // logMessage('myStake: ' + myStake, 'info');
-                if(MA > 3 && LA > 3 && AP > 0.3) {
-                    logMessage('time for over trade', 'info');
-                } 
-            })
-            .catch(error => {
-                logMessage(`Error sending digits to local server: ${error}`, 'error');
-            });
+            formattedData = JSON.stringify({"data": integerDigits});
+            
 
 
-            analyzeAndDisplay(allFetchedLastDigits, digitChart1000, analysisSummary1000, `Analysis of the last ${allFetchedLastDigits.length} ticks.`, true);
+            myAlowestDigit, myAhighestDigit = analyzeAndDisplay(allFetchedLastDigits, digitChart1000, analysisSummary1000, `Analysis of the last ${allFetchedLastDigits.length} ticks.`, true);
+            myAlowestDigit = LWD;
+            myAhighestDigit = HWD;
+            logMessage(`Assigned LWD and HWD for the full analysis`, 'info');
 
             // Run prediction model based on the current tickHistory subset
             const analysisLastDigits = tickHistory.map(price => price.slice(-1));
             const predictionData = runPredictionModel(analysisLastDigits);
             
-            const selectedTradeType = tradeTypeSelect.value;
+            selectedTradeType = tradeTypeSelect.value;
 
             predictionSequence.textContent = `[ ${predictionData.digitSequence.join(' ')} ]`; // Always show the 3-digit sequence
             logMessage(`Predicted digit sequence: [ ${predictionData.digitSequence.join(' ')} ]`, 'info');
 
 
-            if (selectedTradeType === 'Bot') {
-                let detailsHtml = 'Highest Confidence Trades:<br>';
-                let logDetails = 'Bot Decision Confidences:\n';
-
-                // Use the prediction values from the local server (MA, LA, AP)
-                detailsHtml += `OVER 3 (<span class="text-yellow-300">MA: ${MA}, LA: ${LA}, AP: ${(AP * 100).toFixed(2)}%</span>)<br>`;
-                logDetails += `- OVER 3 (MA: ${MA}, LA: ${LA}, AP: ${(AP * 100).toFixed(2)}%)\n`;
-
-                predictionDetails.innerHTML = detailsHtml;
-                logMessage(logDetails, 'info');
-
-                // Place trade if conditions are met
-                if (MA > 3 && LA > 3 && AP > 0.4 && !LowPercentage) {
-                    logMessage('Bot condition met: Placing OVER 3 trade.', 'success');
-                    // Prepare contract params for OVER 3
-                    const selectedTradeTypeForBot = 'DIGITOVER'; // Always use UNDER for Bot trades
-                    const predictedValue = 1;
-                    const contractTypeSpecificParams = { barrier: 1};
-                    let myStake = 0;
-                    let martingaleValue = parseInt(martingaleValueSelect.value) || 1;
-                    if(martingaleNow){
-                        myStake = (martingaleValue * parseFloat(stakeAmountInput.value)).toFixed(2);
-                        logMessage(`Martingale active: Using ${martingaleValue}x stake of ${myStake} for this trade.`, 'info');
-                    } else {
-                        myStake = parseFloat(stakeAmountInput.value).toFixed(2);
-                        logMessage(`Using normal stake of ${myStake} for this trade.`, 'info');
-                    }
-                    const proposalRequest = {
-                        proposal: 1,
-                        amount: parseFloat(myStake),
-                        basis: "stake",
-                        contract_type: selectedTradeTypeForBot,
-                        currency: "USD",
-                        duration: parseInt(tradeTickDurationSelect.value),
-                        duration_unit: "t",
-                        symbol: syntheticIndexSelect.value,
-                        ...contractTypeSpecificParams,
-                        subscribe: 1
-                    };
-
-                    isWaitingForTradeOutcome = true;
-                    websocket.send(JSON.stringify(proposalRequest));
-                } else {
-                    logMessage('Bot condition NOT met: No trade placed.', 'info');
-                    predictionDetails.innerHTML += '<span class="text-yellow-300">No trade placed: Prediction confidence too low.</span>';
-                }
-
-
-
-                    // let allCandidateTrades = [];
-                    // const eligibleTradeTypesForBotDisplay = ['DIGITOVER', 'DIGITUNDER', 'DIGITODD', 'DIGITEVEN'];
-
-                    // eligibleTradeTypesForBotDisplay.forEach(type => {
-                    //     let currentTradeConfidence = 0;
-                    //     let currentTradePredictedValue = null;
-                    //     let isValidSequence = true; 
-
-                    //     if (type === 'DIGITODD') {
-                    //         currentTradePredictedValue = 'Odd';
-                    //         isValidSequence = predictionData.digitSequence.every(d => {
-                    //             const digit = parseInt(d);
-                    //             return !isNaN(digit) && digit % 2 !== 0;
-                    //         });
-                    //         currentTradeConfidence = isValidSequence && (predictionData.totalDigits > 0) ? (predictionData.oddCount / predictionData.totalDigits * 100) : 0;
-                    //     } else if (type === 'DIGITEVEN') {
-                    //         currentTradePredictedValue = 'Even';
-                    //         isValidSequence = predictionData.digitSequence.every(d => {
-                    //             const digit = parseInt(d);
-                    //             return !isNaN(digit) && digit % 2 === 0;
-                    //         });
-                    //         currentTradeConfidence = isValidSequence && (predictionData.totalDigits > 0) ? (predictionData.evenCount / predictionData.totalDigits * 100) : 0;
-                    //     } else if (type === 'DIGITOVER') {
-                    //         const fixedBarrier = 3; // Always over 2
-                    //         currentTradePredictedValue = fixedBarrier;
-                    //         isValidSequence = predictionData.digitSequence.every(d => {
-                    //             const digit = parseInt(d);
-                    //             return !isNaN(digit) && digit > fixedBarrier;
-                    //         });
-                    //         let countOver = 0;
-                    //         if (isValidSequence && predictionData.totalDigits > 0) {
-                    //             for (let i = fixedBarrier + 1; i <= 9; i++) {
-                    //                 countOver += (predictionData.digitFrequencies[i] || 0);
-                    //             }
-                    //             currentTradeConfidence = (countOver / predictionData.totalDigits * 100);
-                    //         } else {
-                    //             currentTradeConfidence = 0;
-                    //         }
-                    //     } else if (type === 'DIGITUNDER') {
-                    //         const fixedBarrier = 6; // Always under 7
-                    //         currentTradePredictedValue = fixedBarrier;
-                    //         isValidSequence = predictionData.digitSequence.every(d => {
-                    //             const digit = parseInt(d);
-                    //             return !isNaN(digit) && digit < fixedBarrier;
-                    //         });
-                    //         let countUnder = 0;
-                    //         if (isValidSequence && predictionData.totalDigits > 0) {
-                    //             for (let i = 0; i < fixedBarrier; i++) {
-                    //                 countUnder += (predictionData.digitFrequencies[i] || 0);
-                    //             }
-                    //             currentTradeConfidence = (countUnder / predictionData.totalDigits * 100);
-                    //         } else {
-                    //             currentTradeConfidence = 0;
-                    //         }
-                    //     }
-                    //     allCandidateTrades.push({ type: type.replace('DIGIT', ''), predictedValue: currentTradePredictedValue, confidence: currentTradeConfidence });
-                    // });
-
-                    // // Sort by confidence descending
-                    // allCandidateTrades.sort((a, b) => b.confidence - a.confidence);
-
-                    // let detailsHtml = 'Highest Confidence Trades:<br>';
-                    // let logDetails = 'Bot Decision Confidences:\n'; // Changed for clarity
-                    // if (allCandidateTrades.length > 0) {
-                    //     allCandidateTrades.forEach(trade => { // Show all eligible trade types and their confidence
-                    //         detailsHtml += `${trade.type} (<span class="text-yellow-300">${trade.predictedValue !== null ? trade.predictedValue : '--'}</span>): <span class="text-yellow-300">${trade.confidence.toFixed(2)}%</span><br>`;
-                    //         logDetails += `- ${trade.type} (${trade.predictedValue !== null ? trade.predictedValue : '--'}): ${trade.confidence.toFixed(2)}% (Threshold: ${trade.type === 'DIGITOVER' || trade.type === 'DIGITUNDER' ? CONFIDENCE_THRESHOLD_OVER_UNDER : CONFIDENCE_THRESHOLD_EVEN_ODD}%)\n`; // For logging with thresholds
-                    //         // logDetails += `- ${trade.type} (${trade.predictedValue !== null ? trade.predictedValue : '--'}): ${trade.confidence.toFixed(2)}% (Threshold: ${trade.type === 'Over' || trade.type === 'Under' ? CONFIDENCE_THRESHOLD_OVER_UNDER : CONFIDENCE_THRESHOLD_EVEN_ODD}%)\n`; // For logging with thresholds
-                    //     });
-                    // } else {
-                    //     detailsHtml += 'No confident trades found.';
-                    //     logDetails += 'No confident trades found.';
-                    // }
-                    // predictionDetails.innerHTML = detailsHtml;
-                    // logMessage(logDetails, 'info'); // Log the highest confidence trades
-
-            }
-            else { // Manual trade type selection (not Bot)
-                let displayPredictedValue = '--';
-                let displayConfidence = 0; 
-                let displayPreferredTradeType = selectedTradeType;
-
-                const predictedDigit = parseInt(predictionData.digitSequence[0]);
-                displayPredictedValue = isNaN(predictedDigit) ? '--' : predictedDigit;
-
-                if (!isNaN(predictedDigit) && predictionData.totalDigits > 0) {
-                    if (selectedTradeType === 'DIGITMATCH') {
-                        displayConfidence = (predictionData.digitFrequencies[predictedDigit] / predictionData.totalDigits * 100);
-                    } else if (selectedTradeType === 'DIGITDIFF') {
-                        displayConfidence = ((predictionData.totalDigits - predictionData.digitFrequencies[predictedDigit]) / predictionData.totalDigits * 100);
-                    } else if (selectedTradeType === 'DIGITOVER') {
-                        const fixedBarrier = 3; // Always over 2 for manual selection
-                        displayPredictedValue = fixedBarrier; // Display fixed barrier
-                        const allPredictedAreOver = predictionData.digitSequence.every(d => {
-                            const digit = parseInt(d);
-                            return !isNaN(digit) && digit > fixedBarrier;
-                        });
-                        if (allPredictedAreOver) {
-                            let countOver = 0;
-                            for (let i = fixedBarrier + 1; i <= 9; i++) {
-                                countOver += (predictionData.digitFrequencies[i] || 0);
-                            }
-                            displayConfidence = (countOver / predictionData.totalDigits * 100);
-                        } else {
-                            displayConfidence = 0;
-                            logMessage(`Warning: For ${selectedTradeType}, not all predicted digits are > ${fixedBarrier}. Confidence set to 0.`, 'info');
-                        }
-                    } else if (selectedTradeType === 'DIGITUNDER') {
-                        const fixedBarrier = 6; // Always under 7 for manual selection
-                        displayPredictedValue = fixedBarrier; // Display fixed barrier
-                         const allPredictedAreUnder = predictionData.digitSequence.every(d => {
-                            const digit = parseInt(d);
-                            return !isNaN(digit) && digit < fixedBarrier;
-                        });
-                        if (allPredictedAreUnder) {
-                            let countUnder = 0;
-                            for (let i = 0; i < fixedBarrier; i++) {
-                                countUnder += (predictionData.digitFrequencies[i] || 0);
-                            }
-                            displayConfidence = (countUnder / predictionData.totalDigits * 100);
-                        } else {
-                            displayConfidence = 0;
-                            logMessage(`Warning: For ${selectedTradeType}, not all predicted digits are < ${fixedBarrier}. Confidence set to 0.`, 'info');
-                        }
-                    } else if (selectedTradeType === 'DIGITODD' || selectedTradeType === 'DIGITEVEN') {
-                         predictedValue = (selectedTradeType === 'DIGITODD' ? 'Odd' : 'Even');
-                         displayPredictedValue = predictedValue;
-                         const allPredictedAreCorrectParity = predictionData.digitSequence.every(d => {
-                            const digit = parseInt(d);
-                            if (isNaN(digit)) return false;
-                            return (selectedTradeType === 'DIGITODD' && digit % 2 !== 0) ||
-                                   (selectedTradeType === 'DIGITEVEN' && digit % 2 === 0);
-                        });
-
-                        if (allPredictedAreCorrectParity && predictionData.totalDigits > 0) {
-                            displayConfidence = (selectedTradeType === 'DIGITODD' ? (predictionData.oddCount / predictionData.totalDigits * 100) : (predictionData.evenCount / predictionData.totalDigits * 100));
-                        } else {
-                            displayConfidence = 0;
-                            logMessage(`Warning: For ${selectedTradeType}, not all predicted digits are of the correct parity. Confidence set to 0.`, 'info');
-                        }
-                    }
-                }
-                predictionDetails.innerHTML = `Predicted Value: <span class="text-yellow-300">${displayPredictedValue}</span>, Confidence: <span class="text-yellow-300">${typeof displayConfidence === 'number' ? displayConfidence.toFixed(2) : displayConfidence}%</span>, Type: ${displayPreferredTradeType.replace('DIGIT', '')}`;
-            }
-            
-            runCustomAnalysis(); // Always run custom analysis to update the second chart
-            startBotBtn.disabled = false;
-        }
+              }
         
         function runCustomAnalysis() {
             logMessage('Updating custom tick analysis chart.', 'info');
@@ -1173,7 +828,9 @@ function formatPriceForExtraction(price, decimals) {
             const customTicks = tickHistory.slice(-count);
             const lastDigitsCustom = customTicks.map(price => price.slice(-1));
             
-            analyzeAndDisplay(lastDigitsCustom, digitChartCustom, analysisSummaryCustom, `Analysis of the last ${customTicks.length} ticks.`, false);
+            myClowestDigit, myChighestDigit = analyzeAndDisplay(lastDigitsCustom, digitChartCustom, analysisSummaryCustom, `Analysis of the last ${customTicks.length} ticks.`, false);
+            myClowestDigit = LWD;
+            myChighestDigit = HWD;
         }
 
         function analyzeAndDisplay(digits, chartElement, summaryElement, summaryText, isAllTicksChart) {
@@ -1184,11 +841,11 @@ function formatPriceForExtraction(price, decimals) {
             chartElement.innerHTML = '';
             summaryElement.textContent = summaryText;
 
-            let percentageSummary = 'Occurrences: ';
-            let minPercentage = Infinity;
-            let maxPercentage = -1;
-            let lowestDigit = -1;
-            let highestDigit = -1;
+            percentageSummary = 'Occurrences: ';
+            minPercentage = Infinity;
+            maxPercentage = -1;
+            lowestDigit = -1;
+            highestDigit = -1;
 
             if (digits.length > 0) {
                 for (let i = 0; i < 10; i++) {
@@ -1205,7 +862,8 @@ function formatPriceForExtraction(price, decimals) {
                     }
                 }
             }
-
+            LWD = -1;
+            HWD = -1;
 
             for (let i = 0; i < 10; i++) {
                 const count = digitCounts[i] || 0;
@@ -1215,10 +873,12 @@ function formatPriceForExtraction(price, decimals) {
                 let barColorClass = 'bg-cyan-500'; // Default color
                 if (digits.length > 0) { // Only apply special colors if there's data
                     if (i === lowestDigit) {
+                        LWD = i;
                         if(i <= 3) LowPercentage = true
                         else LowPercentage = false
                         barColorClass = 'bg-red-500';
                     } else if (i === highestDigit) {
+                        HWD = i;
                         if(i <= 3) LowPercentage = true
                         else LowPercentage = false
                         barColorClass = 'bg-green-500';
@@ -1250,6 +910,10 @@ function formatPriceForExtraction(price, decimals) {
                 chartElement.appendChild(barElement);
             }
             summaryElement.textContent += ` ${percentageSummary}`;
+            logMessage(`------------------`, 'info');
+            logMessage(`LWD: ${LWD}`, 'info');
+            logMessage(`HWD: ${HWD}`, 'info');
+            logMessage(`------------------`, 'info');
         }
 
         function runPredictionModel(digits) {
@@ -1358,28 +1022,30 @@ function formatPriceForExtraction(price, decimals) {
                 return;
             }
             isBotRunning = true;
+            isWaitingForTradeProposal = false;
             isWaitingForTradeOutcome = false; // Reset for a fresh start
             stopBotBtn.disabled = false;
             startBotBtn.disabled = true;
             fetchDataBtn.disabled = true;
             updateStatus('Bot Running', 'cyan', true);
             logMessage('Bot started. Requesting trade proposal...', 'success');
-            requestTradeProposal(); // Initiate the first trade cycle
+            fetchData();
+            //requestTradeProposal(); // Initiate the first trade cycle
         }
 
         function stopBot() {
             isBotRunning = false;
             isWaitingForTradeOutcome = false; // Reset on stop
+            isWaitingForTradeProposal = false; // Reset on stop
             stopBotBtn.disabled = true;
             startBotBtn.disabled = false;
             fetchDataBtn.disabled = false;
             updateStatus(`Logged in as ${accountSelect.value}`, 'green');
             logMessage('Bot stopped by user. Updating analysis UI.', 'info');
-            runFullAnalysis(); // Update UI with latest state after stopping bot
         }
 
         // Sends a proposal request to the Deriv API
-        function requestTradeProposal() {
+        function requestTradeProposal(proposalRequest) {
             if (!isBotRunning) {
                 logMessage('Bot is not running. Not requesting trade proposal.', 'info');
                 return;
@@ -1388,231 +1054,21 @@ function formatPriceForExtraction(price, decimals) {
                 logMessage('Bot is already waiting for a trade outcome. Skipping new proposal request.', 'info');
                 return;
             }
-            
-            logMessage('Bot: Attempting to find a trade. Current isWaitingForTradeOutcome: ' + isWaitingForTradeOutcome, 'info');
-            runFullAnalysis(); // Re-run full analysis to get the latest prediction based on updated historical ticks
-            
-            const predictionData = runPredictionModel(tickHistory.map(price => price.slice(-1)));
-
-            let selectedTradeType = tradeTypeSelect.value;
-            let predictedValue = null;
-            let contractTypeSpecificParams = {};
-            let tradeConfidence = 0;
-
-            if (selectedTradeType === 'Bot') {
-                // let allCandidateTrades = [];
-                // const eligibleTradeTypesForBot = ['DIGITOVER', 'DIGITUNDER', 'DIGITODD', 'DIGITEVEN'];
-
-                // eligibleTradeTypesForBot.forEach(type => {
-                //     let currentTradeConfidence = 0;
-                //     let currentTradePredictedValue = null;
-                //     let currentTradeContractParams = {};
-                //     let isValidSequence = true; 
-                //     let requiredThreshold = 0;
-
-                //     if (type === 'DIGITODD') {
-                //         requiredThreshold = CONFIDENCE_THRESHOLD_EVEN_ODD;
-                //         currentTradePredictedValue = 'Odd';
-                //         isValidSequence = predictionData.digitSequence.every(d => {
-                //             const digit = parseInt(d);
-                //             return !isNaN(digit) && digit % 2 !== 0;
-                //         });
-                //         currentTradeConfidence = isValidSequence && (predictionData.totalDigits > 0) ? (predictionData.oddCount / predictionData.totalDigits * 100) : 0;
-                //     } else if (type === 'DIGITEVEN') {
-                //         requiredThreshold = CONFIDENCE_THRESHOLD_EVEN_ODD;
-                //         currentTradePredictedValue = 'Even';
-                //         isValidSequence = predictionData.digitSequence.every(d => {
-                //             const digit = parseInt(d);
-                //             return !isNaN(digit) && digit % 2 === 0;
-                //         });
-                //         currentTradeConfidence = isValidSequence && (predictionData.totalDigits > 0) ? (predictionData.evenCount / predictionData.totalDigits * 100) : 0;
-                //     } else if (type === 'DIGITOVER') {
-                //         requiredThreshold = CONFIDENCE_THRESHOLD_OVER_UNDER;
-                //         const fixedBarrier = 3; // Always over 2
-                //         currentTradePredictedValue = fixedBarrier;
-                //         currentTradeContractParams = { barrier: fixedBarrier };
-                //         isValidSequence = predictionData.digitSequence.every(d => {
-                //             const digit = parseInt(d);
-                //             return !isNaN(digit) && digit > fixedBarrier;
-                //         });
-                //         let countOver = 0;
-                //         if (isValidSequence && predictionData.totalDigits > 0) {
-                //             for (let i = fixedBarrier + 1; i <= 9; i++) {
-                //                 countOver += (predictionData.digitFrequencies[i] || 0);
-                //             }
-                //             currentTradeConfidence = (countOver / predictionData.totalDigits * 100);
-                //         } else {
-                //             currentTradeConfidence = 0;
-                //         }
-                //     } else if (type === 'DIGITUNDER') {
-                //         requiredThreshold = CONFIDENCE_THRESHOLD_OVER_UNDER;
-                //         const fixedBarrier = 6; // Always under 7
-                //         currentTradePredictedValue = fixedBarrier;
-                //         currentTradeContractParams = { barrier: fixedBarrier };
-                //         isValidSequence = predictionData.digitSequence.every(d => {
-                //             const digit = parseInt(d);
-                //             return !isNaN(digit) && digit < fixedBarrier;
-                //         });
-                //         let countUnder = 0;
-                //         if (isValidSequence && predictionData.totalDigits > 0) {
-                //             for (let i = 0; i < fixedBarrier; i++) {
-                //                 countUnder += (predictionData.digitFrequencies[i] || 0);
-                //             }
-                //             currentTradeConfidence = (countUnder / predictionData.totalDigits * 100);
-                //         } else {
-                //             currentTradeConfidence = 0;
-                //         }
-                //     }
-
-                //     if (currentTradeConfidence >= requiredThreshold) {
-                //         allCandidateTrades.push({ // Corrected variable name
-                //             type: type, 
-                //             predictedValue: currentTradePredictedValue, 
-                //             confidence: currentTradeConfidence, 
-                //             contractParams: currentTradeContractParams 
-                //         });
-                //     }
-                // });
-
-                // // Sort by confidence descending
-                // allCandidateTrades.sort((a, b) => b.confidence - a.confidence);
-
-                // let detailsHtml = 'Highest Confidence Trades:<br>';
-                // let logDetails = 'Bot Decision Confidences:\n'; // For logging
-                // if (allCandidateTrades.length > 0) {
-                //     allCandidateTrades.forEach(trade => { // Show all eligible trade types and their confidence
-                //         detailsHtml += `${trade.type} (<span class="text-yellow-300">${trade.predictedValue !== null ? trade.predictedValue : '--'}</span>): <span class="text-yellow-300">${trade.confidence.toFixed(2)}%</span><br>`;
-                //         logDetails += `- ${trade.type} (${trade.predictedValue !== null ? trade.predictedValue : '--'}): ${trade.confidence.toFixed(2)}% (Threshold: ${trade.type === 'DIGITOVER' || trade.type === 'DIGITUNDER' ? CONFIDENCE_THRESHOLD_OVER_UNDER : CONFIDENCE_THRESHOLD_EVEN_ODD}%)\n`; // For logging with thresholds
-                //         //logDetails += `- ${trade.type} (${trade.predictedValue !== null ? trade.predictedValue : '--'}): ${trade.confidence.toFixed(2)}% (Threshold: ${trade.type === 'Over' || trade.type === 'Under' ? CONFIDENCE_THRESHOLD_OVER_UNDER : CONFIDENCE_THRESHOLD_EVEN_ODD}%)\n`; // For logging with thresholds
-                //     });
-                // } else {
-                //     detailsHtml += 'No confident trades found.';
-                //     logDetails += 'No confident trades found.';
-                // }
-                // predictionDetails.innerHTML = detailsHtml;
-                // logMessage(logDetails, 'info'); // Log the highest confidence trades
-
-                // if (allCandidateTrades.length > 0) { // Corrected variable name
-                //     const bestTradeToExecute = allCandidateTrades[0]; // Corrected variable name
-                //     selectedTradeType = bestTradeToExecute.type;
-                //     predictedValue = bestTradeToExecute.predictedValue;
-                //     tradeConfidence = bestTradeToExecute.confidence;
-                //     contractTypeSpecificParams = bestTradeToExecute.contractParams;
-
-                //     logMessage(`Bot will attempt to place trade: Type=${selectedTradeType.replace('DIGIT', '')}, Predicted=${predictedValue}, Confidence=${tradeConfidence.toFixed(2)}%, Stake=${stakeAmountInput.value} USD`, 'success');
-                //     isWaitingForTradeOutcome = true; // Set flag when a trade is about to be placed
-                // } else {
-                //     logMessage(`Bot could not find a trade with high enough confidence. Waiting for next tick.`, 'info'); // Changed message
-                //     // Display the message for low confidence on the UI if no trade is placed
-                //     predictionDetails.innerHTML = `No trade placed: Bot confidence too low for all types.`;
-                //     // No setTimeout here; we wait for the next tick for a new proposal attempt
-                //     return; // Exit without sending proposal
-                // }
-
-            } 
-            else { // Manual trade type selection
-                let displayPredictedValueForUI = '--';
-                let displayConfidence = 0; 
-                let displayPreferredTradeType = selectedTradeType;
-
-                const predictedDigit = parseInt(predictionData.digitSequence[0]);
-                displayPredictedValueForUI = isNaN(predictedDigit) ? '--' : predictedDigit;
-
-                if (!isNaN(predictedDigit) && predictionData.totalDigits > 0) {
-                    if (selectedTradeType === 'DIGITMATCH') {
-                        tradeConfidence = (predictionData.digitFrequencies[predictedDigit] / predictionData.totalDigits * 100);
-                        contractTypeSpecificParams = { barrier: predictedDigit };
-                    } else if (selectedTradeType === 'DIGITDIFF') {
-                        if (Date.now() - lastDiffTradeTimestamp < DIFF_TRADE_COOLDOWN_MS) {
-                            const remainingCooldown = Math.ceil((DIFF_TRADE_COOLDOWN_MS - (Date.now() - lastDiffTradeTimestamp)) / 1000);
-                            logMessage(`DIGITDIFF cooldown active. Please wait ${remainingCooldown} seconds before placing another Differs trade.`, 'info');
-                            predictionDetails.innerHTML = `Predicted Value: <span class="text-yellow-300">--</span>, Confidence: <span class="text-yellow-300">--%</span>, Type: Diff (Cooldown)`;
-                            return;
-                        }
-                        tradeConfidence = ((predictionData.totalDigits - predictionData.digitFrequencies[predictedDigit]) / predictionData.totalDigits * 100);
-                        contractTypeSpecificParams = { barrier: predictedDigit };
-                        // lastDiffTradeTimestamp = Date.now(); // <-- Move this to after the trade is actually sent
-                    } else if (selectedTradeType === 'DIGITOVER') {
-                        const fixedBarrier = 3;
-                        displayPredictedValueForUI = fixedBarrier;
-                        predictedValue = fixedBarrier; // Set predictedValue for logging
-                        const allPredictedAreOver = predictionData.digitSequence.every(d => {
-                            const digit = parseInt(d);
-                            return !isNaN(digit) && digit > fixedBarrier;
-                        });
-                        if (allPredictedAreOver) {
-                            contractTypeSpecificParams = { barrier: fixedBarrier };
-                            let countOver = 0;
-                            for (let i = fixedBarrier + 1; i <= 9; i++) {
-                                countOver += (predictionData.digitFrequencies[i] || 0);
-                            }
-                            tradeConfidence = (countOver / predictionData.totalDigits * 100);
-                        } else {
-                            tradeConfidence = 0;
-                            logMessage(`Warning: For ${selectedTradeType}, not all predicted digits are > ${fixedBarrier}. Confidence set to 0.`, 'info');
-                        }
-                    } else if (selectedTradeType === 'DIGITUNDER') {
-                        const fixedBarrier = 6;
-                        displayPredictedValueForUI = fixedBarrier;
-                        predictedValue = fixedBarrier; // Set predictedValue for logging
-                        const allPredictedAreUnder = predictionData.digitSequence.every(d => {
-                            const digit = parseInt(d);
-                            return !isNaN(digit) && digit < fixedBarrier;
-                        });
-                        if (allPredictedAreUnder) {
-                            contractTypeSpecificParams = { barrier: fixedBarrier };
-                            let countUnder = 0;
-                            for (let i = 0; i < fixedBarrier; i++) {
-                                countUnder += (predictionData.digitFrequencies[i] || 0);
-                            }
-                            tradeConfidence = (countUnder / predictionData.totalDigits * 100);
-                        } else {
-                            tradeConfidence = 0;
-                            logMessage(`Warning: For ${selectedTradeType}, not all predicted digits are < ${fixedBarrier}. Confidence set to 0.`, 'info');
-                        }
-                    } else if (selectedTradeType === 'DIGITODD' || selectedTradeType === 'DIGITEVEN') {
-                         predictedValue = (selectedTradeType === 'DIGITODD' ? 'Odd' : 'Even');
-                         displayPredictedValueForUI = predictedValue;
-                         const allPredictedAreCorrectParity = predictionData.digitSequence.every(d => {
-                            const digit = parseInt(d);
-                            if (isNaN(digit)) return false;
-                            return (selectedTradeType === 'DIGITODD' && digit % 2 !== 0) ||
-                                   (selectedTradeType === 'DIGITEVEN' && digit % 2 === 0);
-                        });
-
-                        if (allPredictedAreCorrectParity && predictionData.totalDigits > 0) {
-                            tradeConfidence = (selectedTradeType === 'DIGITODD' ? (predictionData.oddCount / predictionData.totalDigits * 100) : (predictionData.evenCount / predictionData.totalDigits * 100));
-                        } else {
-                            tradeConfidence = 0;
-                            logMessage(`Warning: For ${selectedTradeType}, not all predicted digits are of the correct parity. Confidence set to 0.`, 'info');
-                        }
-                    }
-                }
-                predictionDetails.innerHTML = `Predicted Value: <span class="text-yellow-300">${displayPredictedValueForUI}</span>, Confidence: <span class="text-yellow-300">${typeof tradeConfidence === 'number' ? tradeConfidence.toFixed(2) : displayConfidence}%</span>, Type: ${displayPreferredTradeType.replace('DIGIT', '')}`;
-                const proposalRequest = {
-                proposal: 1,
-                amount: parseFloat(stakeAmountInput.value),
-                basis: "stake", 
-                contract_type: selectedTradeType, 
-                currency: "USD",
-                duration: 1, 
-                duration_unit: "t",
-                symbol: syntheticIndexSelect.value,
-                ...contractTypeSpecificParams,
-                subscribe: 1 
-            };
-            
-            logMessage(`Placing trade: Type=${selectedTradeType.replace('DIGIT', '')}, Predicted=${predictedValue}, Confidence=${typeof tradeConfidence === 'number' ? tradeConfidence.toFixed(2) : tradeConfidence}%, Stake=${stakeAmountInput.value} USD`, 'info');
-            
+            if (isWaitingForTradeProposal) {
+                logMessage('Bot is already waiting for a trade proposal. Skipping new proposal request.', 'info');
+                return;
             }
-            
-            startBotBtn.disabled = false;
-
-            // If DIGITDIFF, set cooldown timestamp only when actually sending the trade
-            if (selectedTradeType === 'DIGITDIFF') {
-                lastDiffTradeTimestamp = Date.now();
+            if (!proposalRequest) {
+                logMessage('No proposal request provided. Cannot proceed.', 'error');
+                return;
             }
-            websocket.send(JSON.stringify(proposalRequest));
+            else{
+                logMessage(`Requesting trade proposal with params: ${JSON.stringify(proposalRequest)}`, 'api');
+                // Send the proposal request to the WebSocket server
+                websocket.send(JSON.stringify(proposalRequest));
+                foundTradeConditions = false;
+                isWaitingForTradeProposal = true;  
+            }
         }
 
         function sendBuyOrder(proposalId, price) {
@@ -1681,12 +1137,158 @@ function formatPriceForExtraction(price, decimals) {
             });
         }
 
+        function checkPercentageForTrade() {
+            logMessage(`Lowest Digit For All: ${myAlowestDigit}`, 'info');
+                logMessage(`Highest Digit For All: ${myAhighestDigit}`, 'info');
+                logMessage(`Lowest Digit For Custom List: ${myClowestDigit}`, 'info');
+                logMessage(`Highest Digit For Custom List: ${myChighestDigit}`, 'info');
+                logMessage(`time Now: ${Date.now()}`, 'info');
+                logMessage(`Elapsed Time: ${Date.now() -   lastPercentageCheck}`, 'info');
+
+                // Check if all lowest/highest digits are NOT below 3
+                // if (Date.now() - lastPercentageCheck > 10000){
+                    logMessage('Resetting Index Percentage Timer.', 'info');
+                    lastPercentageCheck = Date.now();
+                    if(
+                    typeof myAlowestDigit === "number" && typeof myAhighestDigit === "number" &&
+                    typeof myClowestDigit === "number" && typeof myChighestDigit === "number"
+                ) {
+                    if(
+                    myAlowestDigit <= 1 || myAhighestDigit <= 1 ||
+                    myClowestDigit <= 1 || myChighestDigit <= 1
+                ) {
+                    
+                    // Switch to the next volatility index in the dropdown
+                    const currentIndex = syntheticIndexSelect.selectedIndex;
+                    const totalOptions = syntheticIndexSelect.options.length;
+                    const nextIndex = (currentIndex + 1) % totalOptions;
+                    syntheticIndexSelect.selectedIndex = nextIndex;
+
+                    // Update the label (if you want to show it somewhere else, update that element too)
+                    logMessage(`All lowest/highest digits <= 3. Switching volatility index to: ${syntheticIndexSelect.options[nextIndex].text}`, 'info');
+
+                    // Optionally, trigger a fetch for new data
+                    // fetchData();
+                    // return false; // Indicate that an index switch was made
+                }
+
+                else{
+                    logMessage('All lowest/highest digits are above 3. No index switch needed.', 'info');
+                    getPredicitonNTrade();
+                    // return true;
+                }
+            }
+        }
+        // }
+
+        function getPredicitonNTrade(){
+
+            // Send last digits to local server at http://localhost:5000
+            logMessage('=====>Sending last digits to local server for prediction...', 'info');
+            // fetch('http://127.0.0.1:5000/receive', {
+            fetch('https://3wzlrmz8-5000.uks1.devtunnels.ms/receive', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formattedData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                logMessage('Successfully sent digits to local server.', 'success');
+                logMessage(`Server Response: ${JSON.stringify(data)}`, 'info');
+                prediction_output = JSON.stringify(data);
+                prediction_output = JSON.parse(prediction_output);
+                MA = prediction_output.mostAppearing;
+                LA = prediction_output.smallestNumberAppearing;
+                AP = prediction_output.percentage;
+                logMessage(`Prediction MA: ${MA}`, 'info');
+                logMessage(`Prediction LA: ${LA}`, 'info');
+                logMessage(`Prediction OP: ${AP}`, 'info');
+                
+            })
+            .catch(error => {
+                logMessage(`Error sending digits to local server: ${error}`, 'error');
+            });
+
+            if (selectedTradeType === 'Bot') {
+                let detailsHtml = 'Highest Confidence Trades:<br>';
+                let logDetails = 'Bot Decision Confidences:\n';
+
+                // Use the prediction values from the local server (MA, LA, AP)
+                detailsHtml += `OVER 3 (<span class="text-yellow-300">MA: ${MA}, LA: ${LA}, AP: ${(AP * 100).toFixed(2)}%</span>)<br>`;
+                logDetails += `- OVER 3 (MA: ${MA}, LA: ${LA}, AP: ${(AP * 100).toFixed(2)}%)\n`;
+
+                predictionDetails.innerHTML = detailsHtml;
+                logMessage(logDetails, 'info');
+
+                // Place trade if conditions are met
+                // Get AP threshold from user input (default 0.3)
+                const apThresholdInput = document.getElementById('ap-threshold');
+                let apThreshold = 0.5;
+                if (apThresholdInput && !isNaN(parseFloat(apThresholdInput.value))) {
+                    apThreshold = parseFloat(apThresholdInput.value);
+                    }
+                if (MA >= 3 && LA >= 3 && AP > apThreshold && !LowPercentage && !isWaitingForTradeOutcome) {
+                        logMessage(`Bot condition met: Placing OVER 3 trade (AP threshold: ${apThreshold}).`, 'success');
+                        // Prepare contract params for OVER 3
+                        const selectedTradeTypeForBot = 'DIGITOVER'; // Always use OVER for Bot trades
+                        const predictedValue = 2;
+                        const contractTypeSpecificParams = { barrier: 2};
+                        let myStake = 0;
+                        let martingaleValue = parseInt(martingaleValueSelect.value) || 1;
+                    if(martingaleNow){
+                        myStake = (martingaleValue * parseFloat(stakeAmountInput.value)).toFixed(2);
+                        logMessage(`Martingale active: Using ${martingaleValue}x stake of ${myStake} for this trade.`, 'info');
+                    } else {
+                        myStake = parseFloat(stakeAmountInput.value).toFixed(2);
+                        logMessage(`Using normal stake of ${myStake} for this trade.`, 'info');
+                    }
+                     proposalRequest = {
+                        proposal: 1,
+                        amount: parseFloat(myStake),
+                        basis: "stake",
+                        contract_type: selectedTradeTypeForBot,
+                        currency: "USD",
+                        duration: parseInt(tradeTickDurationSelect.value),
+                        duration_unit: "t",
+                        symbol: syntheticIndexSelect.value,
+                        ...contractTypeSpecificParams,
+                        subscribe: 1
+                    };
+                    // logMessage(`Requesting trade proposal with params: ${JSON.stringify(proposalRequest)}`, 'api');
+                    foundTradeConditions = true;
+                    requestTradeProposal(proposalRequest);
+                    // isWaitingForTradeOutcome = true;
+                    //websocket.send(JSON.stringify(proposalRequest));
+                } 
+                else {
+                    logMessage('Bot condition NOT met: No trade placed.', 'info');
+                    predictionDetails.innerHTML += '<span class="text-yellow-300">No trade placed: Prediction confidence too low.</span>';
+                }
+   
+            }
+            else { // Manual trade type selection (not Bot)
+                let displayPredictedValue = '--';
+                let displayConfidence = 0; 
+                let displayPreferredTradeType = selectedTradeType;
+
+                const predictedDigit = parseInt(predictionData.digitSequence[0]);
+                displayPredictedValue = isNaN(predictedDigit) ? '--' : predictedDigit;
+                displayConfidence = (predictionData.digitFrequencies[predictedDigit] / predictionData.totalDigits * 100);
+            
+        }
+  
+        }
+
 
         // --- UI & Helper Functions ---
         function resetAppState() {
             isAuthenticated = false;
             isBotRunning = false;
             isWaitingForTradeOutcome = false; // Reset on app state reset
+            isWaitingForTradeProposal = false; // Reset on app state reset
+            foundTradeConditions = false;
             accounts = [];
             tickHistory = [];
             allTickHistory = [];
@@ -1771,7 +1373,6 @@ function formatPriceForExtraction(price, decimals) {
                 const previousValue = tradeTypeSelect.dataset.previousValue || 'Bot';
                 tradeTypeSelect.value = previousValue;
             } else {
-                runFullAnalysis(); // Rerun analysis to update prediction display immediately
                 tradeTypeSelect.dataset.previousValue = tradeTypeSelect.value; // Store current value
             }
         });
@@ -1791,9 +1392,12 @@ function formatPriceForExtraction(price, decimals) {
         });
 
         // --- Initial State ---
-        resetAppState();
+        // resetAppState();
         logMessage("Welcome! Please enter your API token and optional App ID to connect.", 'info');
 
     </script>
 </body>
 </html>
+
+<!-- checkPercentageForTrade(myAlowestDigit, myAhighestDigit, myClowestDigit, myChighestDigit) -->
+ <!-- getPredicitonNTrade() -->

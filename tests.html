@@ -1,0 +1,285 @@
+
+// --- Analysis & Prediction Logic ---
+function runFullAnalysis() {
+    logMessage('Running full digit analysis and prediction model.', 'info');
+    // Ensure tickHistory always reflects the selected totalHistoricalTicks
+    let maxObservedDecimals = getMaxObservedDecimals(allTickHistory);
+    // logMessage('=====================================================================', 'info');
+    // logMessage('initial price list: ' + JSON.stringify(allTickHistory), 'info');
+    // logMessage('=====================================================================', 'info');
+    
+
+    tickHistory = allTickHistory
+        .slice(-parseInt(totalHistoricalTicksSelect.value))
+        .map(price => formatPriceForExtraction(price, maxObservedDecimals));
+        // logMessage('modified Price List: ' + JSON.stringify(tickHistory), 'info');
+    if (tickHistory.length === 0) {
+        predictionSequence.textContent = '[ ? ? ? ]';
+        predictionDetails.innerHTML = 'Predicted Value: --, Confidence: --%, Type: --';
+        logMessage('Not enough tick history for full analysis. Displaying placeholders.', 'info');
+        return;
+    }
+    
+    // Always update the 'All Fetched Ticks' chart
+    let allFetchedLastDigits = tickHistory.map(price => price.slice(-1));
+
+    // Convert last digits to integers before sending
+    const integerDigits = allFetchedLastDigits.map(d => parseInt(d));
+    let formattedData = JSON.stringify({"data": integerDigits});
+    // Send last digits to local server at http://localhost:5000
+    fetch('http://127.0.0.1:5000/receive', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formattedData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        logMessage('Successfully sent digits to local server.', 'success');
+        logMessage(`Server Response: ${JSON.stringify(data)}`, 'info');
+        prediction_output = JSON.stringify(data);
+        prediction_output = JSON.parse(prediction_output);
+        MA = prediction_output.mostAppearing;
+        LA = prediction_output.smallestNumberAppearing;
+        AP = prediction_output.percentage;
+        logMessage(`Prediction MA: ${MA}`, 'info');
+        logMessage(`Prediction LA: ${LA}`, 'info');
+        logMessage(`Prediction OP: ${AP}`, 'info');
+        logMessage('martingaleNow: ' + martingaleNow, 'info');
+        // logMessage('myStake: ' + myStake, 'info');
+        if(MA > 3 && LA > 3 && AP > 0.3) {
+            logMessage('time for over trade', 'info');
+        } 
+    })
+    .catch(error => {
+        logMessage(`Error sending digits to local server: ${error}`, 'error');
+    });
+
+
+    analyzeAndDisplay(allFetchedLastDigits, digitChart1000, analysisSummary1000, `Analysis of the last ${allFetchedLastDigits.length} ticks.`, true);
+
+    // Run prediction model based on the current tickHistory subset
+    const analysisLastDigits = tickHistory.map(price => price.slice(-1));
+    const predictionData = runPredictionModel(analysisLastDigits);
+    
+    const selectedTradeType = tradeTypeSelect.value;
+
+    predictionSequence.textContent = `[ ${predictionData.digitSequence.join(' ')} ]`; // Always show the 3-digit sequence
+    logMessage(`Predicted digit sequence: [ ${predictionData.digitSequence.join(' ')} ]`, 'info');
+
+
+    if (selectedTradeType === 'Bot') {
+        let detailsHtml = 'Highest Confidence Trades:<br>';
+        let logDetails = 'Bot Decision Confidences:\n';
+
+        // Use the prediction values from the local server (MA, LA, AP)
+        detailsHtml += `OVER 3 (<span class="text-yellow-300">MA: ${MA}, LA: ${LA}, AP: ${(AP * 100).toFixed(2)}%</span>)<br>`;
+        logDetails += `- OVER 3 (MA: ${MA}, LA: ${LA}, AP: ${(AP * 100).toFixed(2)}%)\n`;
+
+        predictionDetails.innerHTML = detailsHtml;
+        logMessage(logDetails, 'info');
+
+        // Place trade if conditions are met
+        // Get AP threshold from user input (default 0.3)
+        const apThresholdInput = document.getElementById('ap-threshold');
+        let apThreshold = 0.3;
+        if (apThresholdInput && !isNaN(parseFloat(apThresholdInput.value))) {
+            apThreshold = parseFloat(apThresholdInput.value);
+        }
+
+        if (MA > 3 && LA > 0 && AP > apThreshold && !LowPercentage) {
+            logMessage(`Bot condition met: Placing OVER 3 trade (AP threshold: ${apThreshold}).`, 'success');
+            // Prepare contract params for OVER 3
+            const selectedTradeTypeForBot = 'DIGITOVER'; // Always use OVER for Bot trades
+            const predictedValue = 1;
+            const contractTypeSpecificParams = { barrier: 1};
+            let myStake = 0;
+            let martingaleValue = parseInt(martingaleValueSelect.value) || 1;
+            if(martingaleNow){
+                myStake = (martingaleValue * parseFloat(stakeAmountInput.value)).toFixed(2);
+                logMessage(`Martingale active: Using ${martingaleValue}x stake of ${myStake} for this trade.`, 'info');
+            } else {
+                myStake = parseFloat(stakeAmountInput.value).toFixed(2);
+                logMessage(`Using normal stake of ${myStake} for this trade.`, 'info');
+            }
+            const proposalRequest = {
+                proposal: 1,
+                amount: parseFloat(myStake),
+                basis: "stake",
+                contract_type: selectedTradeTypeForBot,
+                currency: "USD",
+                duration: parseInt(tradeTickDurationSelect.value),
+                duration_unit: "t",
+                symbol: syntheticIndexSelect.value,
+                ...contractTypeSpecificParams,
+                subscribe: 1
+            };
+
+            isWaitingForTradeOutcome = true;
+            websocket.send(JSON.stringify(proposalRequest));
+        } else {
+            logMessage('Bot condition NOT met: No trade placed.', 'info');
+            predictionDetails.innerHTML += '<span class="text-yellow-300">No trade placed: Prediction confidence too low.</span>';
+        }
+
+
+
+            // let allCandidateTrades = [];
+            // const eligibleTradeTypesForBotDisplay = ['DIGITOVER', 'DIGITUNDER', 'DIGITODD', 'DIGITEVEN'];
+
+            // eligibleTradeTypesForBotDisplay.forEach(type => {
+            //     let currentTradeConfidence = 0;
+            //     let currentTradePredictedValue = null;
+            //     let isValidSequence = true; 
+
+            //     if (type === 'DIGITODD') {
+            //         currentTradePredictedValue = 'Odd';
+            //         isValidSequence = predictionData.digitSequence.every(d => {
+            //             const digit = parseInt(d);
+            //             return !isNaN(digit) && digit % 2 !== 0;
+            //         });
+            //         currentTradeConfidence = isValidSequence && (predictionData.totalDigits > 0) ? (predictionData.oddCount / predictionData.totalDigits * 100) : 0;
+            //     } else if (type === 'DIGITEVEN') {
+            //         currentTradePredictedValue = 'Even';
+            //         isValidSequence = predictionData.digitSequence.every(d => {
+            //             const digit = parseInt(d);
+            //             return !isNaN(digit) && digit % 2 === 0;
+            //         });
+            //         currentTradeConfidence = isValidSequence && (predictionData.totalDigits > 0) ? (predictionData.evenCount / predictionData.totalDigits * 100) : 0;
+            //     } else if (type === 'DIGITOVER') {
+            //         const fixedBarrier = 3; // Always over 2
+            //         currentTradePredictedValue = fixedBarrier;
+            //         isValidSequence = predictionData.digitSequence.every(d => {
+            //             const digit = parseInt(d);
+            //             return !isNaN(digit) && digit > fixedBarrier;
+            //         });
+            //         let countOver = 0;
+            //         if (isValidSequence && predictionData.totalDigits > 0) {
+            //             for (let i = fixedBarrier + 1; i <= 9; i++) {
+            //                 countOver += (predictionData.digitFrequencies[i] || 0);
+            //             }
+            //             currentTradeConfidence = (countOver / predictionData.totalDigits * 100);
+            //         } else {
+            //             currentTradeConfidence = 0;
+            //         }
+            //     } else if (type === 'DIGITUNDER') {
+            //         const fixedBarrier = 6; // Always under 7
+            //         currentTradePredictedValue = fixedBarrier;
+            //         isValidSequence = predictionData.digitSequence.every(d => {
+            //             const digit = parseInt(d);
+            //             return !isNaN(digit) && digit < fixedBarrier;
+            //         });
+            //         let countUnder = 0;
+            //         if (isValidSequence && predictionData.totalDigits > 0) {
+            //             for (let i = 0; i < fixedBarrier; i++) {
+            //                 countUnder += (predictionData.digitFrequencies[i] || 0);
+            //             }
+            //             currentTradeConfidence = (countUnder / predictionData.totalDigits * 100);
+            //         } else {
+            //             currentTradeConfidence = 0;
+            //         }
+            //     }
+            //     allCandidateTrades.push({ type: type.replace('DIGIT', ''), predictedValue: currentTradePredictedValue, confidence: currentTradeConfidence });
+            // });
+
+            // // Sort by confidence descending
+            // allCandidateTrades.sort((a, b) => b.confidence - a.confidence);
+
+            // let detailsHtml = 'Highest Confidence Trades:<br>';
+            // let logDetails = 'Bot Decision Confidences:\n'; // Changed for clarity
+            // if (allCandidateTrades.length > 0) {
+            //     allCandidateTrades.forEach(trade => { // Show all eligible trade types and their confidence
+            //         detailsHtml += `${trade.type} (<span class="text-yellow-300">${trade.predictedValue !== null ? trade.predictedValue : '--'}</span>): <span class="text-yellow-300">${trade.confidence.toFixed(2)}%</span><br>`;
+            //         logDetails += `- ${trade.type} (${trade.predictedValue !== null ? trade.predictedValue : '--'}): ${trade.confidence.toFixed(2)}% (Threshold: ${trade.type === 'DIGITOVER' || trade.type === 'DIGITUNDER' ? CONFIDENCE_THRESHOLD_OVER_UNDER : CONFIDENCE_THRESHOLD_EVEN_ODD}%)\n`; // For logging with thresholds
+            //         // logDetails += `- ${trade.type} (${trade.predictedValue !== null ? trade.predictedValue : '--'}): ${trade.confidence.toFixed(2)}% (Threshold: ${trade.type === 'Over' || trade.type === 'Under' ? CONFIDENCE_THRESHOLD_OVER_UNDER : CONFIDENCE_THRESHOLD_EVEN_ODD}%)\n`; // For logging with thresholds
+            //     });
+            // } else {
+            //     detailsHtml += 'No confident trades found.';
+            //     logDetails += 'No confident trades found.';
+            // }
+            // predictionDetails.innerHTML = detailsHtml;
+            // logMessage(logDetails, 'info'); // Log the highest confidence trades
+
+    }
+    else { // Manual trade type selection (not Bot)
+        let displayPredictedValue = '--';
+        let displayConfidence = 0; 
+        let displayPreferredTradeType = selectedTradeType;
+
+        const predictedDigit = parseInt(predictionData.digitSequence[0]);
+        displayPredictedValue = isNaN(predictedDigit) ? '--' : predictedDigit;
+
+        if (!isNaN(predictedDigit) && predictionData.totalDigits > 0) {
+            if (selectedTradeType === 'DIGITMATCH') {
+                displayConfidence = (predictionData.digitFrequencies[predictedDigit] / predictionData.totalDigits * 100);
+            } else if (selectedTradeType === 'DIGITDIFF') {
+                displayConfidence = ((predictionData.totalDigits - predictionData.digitFrequencies[predictedDigit]) / predictionData.totalDigits * 100);
+            } else if (selectedTradeType === 'DIGITOVER') {
+                const fixedBarrier = 3; // Always over 2 for manual selection
+                displayPredictedValue = fixedBarrier; // Display fixed barrier
+                const allPredictedAreOver = predictionData.digitSequence.every(d => {
+                    const digit = parseInt(d);
+                    return !isNaN(digit) && digit > fixedBarrier;
+                });
+                if (allPredictedAreOver) {
+                    let countOver = 0;
+                    for (let i = fixedBarrier + 1; i <= 9; i++) {
+                        countOver += (predictionData.digitFrequencies[i] || 0);
+                    }
+                    displayConfidence = (countOver / predictionData.totalDigits * 100);
+                } else {
+                    displayConfidence = 0;
+                    logMessage(`Warning: For ${selectedTradeType}, not all predicted digits are > ${fixedBarrier}. Confidence set to 0.`, 'info');
+                }
+            } else if (selectedTradeType === 'DIGITUNDER') {
+                const fixedBarrier = 6; // Always under 7 for manual selection
+                displayPredictedValue = fixedBarrier; // Display fixed barrier
+                    const allPredictedAreUnder = predictionData.digitSequence.every(d => {
+                    const digit = parseInt(d);
+                    return !isNaN(digit) && digit < fixedBarrier;
+                });
+                if (allPredictedAreUnder) {
+                    let countUnder = 0;
+                    for (let i = 0; i < fixedBarrier; i++) {
+                        countUnder += (predictionData.digitFrequencies[i] || 0);
+                    }
+                    displayConfidence = (countUnder / predictionData.totalDigits * 100);
+                } else {
+                    displayConfidence = 0;
+                    logMessage(`Warning: For ${selectedTradeType}, not all predicted digits are < ${fixedBarrier}. Confidence set to 0.`, 'info');
+                }
+            } else if (selectedTradeType === 'DIGITODD' || selectedTradeType === 'DIGITEVEN') {
+                    predictedValue = (selectedTradeType === 'DIGITODD' ? 'Odd' : 'Even');
+                    displayPredictedValue = predictedValue;
+                    const allPredictedAreCorrectParity = predictionData.digitSequence.every(d => {
+                    const digit = parseInt(d);
+                    if (isNaN(digit)) return false;
+                    return (selectedTradeType === 'DIGITODD' && digit % 2 !== 0) ||
+                            (selectedTradeType === 'DIGITEVEN' && digit % 2 === 0);
+                });
+
+                if (allPredictedAreCorrectParity && predictionData.totalDigits > 0) {
+                    displayConfidence = (selectedTradeType === 'DIGITODD' ? (predictionData.oddCount / predictionData.totalDigits * 100) : (predictionData.evenCount / predictionData.totalDigits * 100));
+                } else {
+                    displayConfidence = 0;
+                    logMessage(`Warning: For ${selectedTradeType}, not all predicted digits are of the correct parity. Confidence set to 0.`, 'info');
+                }
+            }
+        }
+        predictionDetails.innerHTML = `Predicted Value: <span class="text-yellow-300">${displayPredictedValue}</span>, Confidence: <span class="text-yellow-300">${typeof displayConfidence === 'number' ? displayConfidence.toFixed(2) : displayConfidence}%</span>, Type: ${displayPreferredTradeType.replace('DIGIT', '')}`;
+    }
+    
+    runCustomAnalysis(); // Always run custom analysis to update the second chart
+    startBotBtn.disabled = false;
+}
+
+function runCustomAnalysis() {
+    logMessage('Updating custom tick analysis chart.', 'info');
+    if (tickHistory.length === 0) return;
+    const count = parseInt(customTickCountSelect.value);
+    const customTicks = tickHistory.slice(-count);
+    const lastDigitsCustom = customTicks.map(price => price.slice(-1));
+    
+    analyzeAndDisplay(lastDigitsCustom, digitChartCustom, analysisSummaryCustom, `Analysis of the last ${customTicks.length} ticks.`, false);
+}
