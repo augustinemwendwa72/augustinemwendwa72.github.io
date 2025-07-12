@@ -3,14 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Deriv Digit Analyzer & Trading Bot</title>
+    <title>Deriv AITrader</title>
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts for a clean look -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
+    <!-- ...existing code... -->
+    <link rel="icon" type="image/x-icon" href="https://cdn.prod.website-files.com/65c76c6482e68a9e09d9b765/65c773033acbd57cd18cc4c8_deriv_favicon_32.png">
+    <!-- ...existing code... -->    <style>
         /* Custom styles to complement Tailwind */
         body {
             font-family: 'Inter', sans-serif;
@@ -22,7 +24,29 @@
             border: 1px solid #374151; /* border-gray-700 */
             border-radius: 0.75rem; /* rounded-xl */
             padding: 1.5rem; /* p-6 */
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            box-shadow:
+                0 0 12px 2px #00fff7, /* Neon cyan outer glow */
+                0 0 32px 8px #1e40af44, /* Blue soft glow */
+                0 4px 6px -1px rgb(0 0 0 / 0.1),
+                0 2px 4px -2px rgb(0 0 0 / 0.1);
+            transition: box-shadow 0.3s;
+        }
+        .card:hover {
+            box-shadow:
+                0 0 24px 6px #00fff7, /* Stronger glow on hover */
+                0 0 48px 16px #1e40af88,
+                0 4px 6px -1px rgb(0 0 0 / 0.1),
+                0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        /* Optional: Glow for buttons */
+        .card button, .card select, .card input {
+            box-shadow: 0 0 8px 1px #00fff7aa;
+            border: 1px solid #00fff733;
+            transition: box-shadow 0.2s, border-color 0.2s;
+        }
+        .card button:focus, .card select:focus, .card input:focus {
+            box-shadow: 0 0 16px 2px #00fff7cc;
+            border-color: #00fff7;
         }
         .log-message {
             font-family: 'monospace';
@@ -68,9 +92,21 @@
 <body class="p-4 md:p-8">
     <div class="max-w-7xl mx-auto space-y-8">
         <!-- Header Section -->
-        <header class="text-center">
-            <h1 class="text-3xl md:text-4xl font-bold text-white">Deriv Digit Analyzer & Trading Bot</h1>
-            <p class="text-gray-400 mt-2">Analyze historical digit patterns and automate trades based on predictions.</p>
+        <header class="text-center mb-8">
+            <div class="flex justify-center mb-4">
+                <img src="https://cdn.prod.website-files.com/65c76c6482e68a9e09d9b765/65c773033acbd57cd18cc4c8_deriv_favicon_32.png" alt="Deriv Logo" class="w-14 h-14 rounded-full shadow-lg ring-4 ring-cyan-400/60 animate-pulse">
+            </div>
+            <h1 class="text-4xl md:text-5xl font-extrabold bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-blue-500 bg-clip-text text-transparent drop-shadow-lg tracking-tight mb-2">
+                Deriv Trader <span class="text-cyan-300 animate-pulse">AI</span> Auto Trader
+            </h1>
+            <p class="text-lg md:text-xl text-gray-300 mt-2 max-w-2xl mx-auto font-medium drop-shadow">
+                <span class="text-cyan-400 font-semibold">Analyze</span> historical digit patterns and <span class="text-fuchsia-400 font-semibold">automate trades</span> with advanced AI-powered predictions.
+            </p>
+            <div class="flex justify-center mt-4 space-x-2">
+                <span class="inline-block px-3 py-1 bg-cyan-900/60 text-cyan-300 rounded-full text-xs font-semibold shadow ring-1 ring-cyan-400/40">Futuristic</span>
+                <span class="inline-block px-3 py-1 bg-fuchsia-900/60 text-fuchsia-300 rounded-full text-xs font-semibold shadow ring-1 ring-fuchsia-400/40">AI Powered</span>
+                <span class="inline-block px-3 py-1 bg-blue-900/60 text-blue-300 rounded-full text-xs font-semibold shadow ring-1 ring-blue-400/40">Auto Trading</span>
+            </div>
         </header>
         
         <!-- Login and Account Selection -->
@@ -270,10 +306,38 @@
                     </div>
                     <div id="logs-container" class="w-full h-96 bg-gray-900 rounded-lg p-3 overflow-y-auto"></div>
                 </div>
+
+                <!-- Synthetic Chart Card -->
+                <div class="card">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-2">
+        <div>
+            <h2 class="text-xl font-semibold text-white">Synthetic Chart</h2>
+            <div class="text-sm text-gray-400 mt-1">
+                Selected: <span id="selected-synthetic-label" class="font-bold text-cyan-300"></span> | 
+                Ticks: <span id="selected-tick-count-label" class="font-bold text-fuchsia-300"></span>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 md:mt-0">
+            <label for="chart-type-select" class="text-gray-300 text-sm mr-1">Chart Type:</label>
+            <select id="chart-type-select" class="bg-gray-900 border border-gray-700 text-white rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                <option value="line">Line</option>
+                <option value="candles">Candles (1m)</option>
+            </select>
+            <button id="refresh-synthetic-chart" class="ml-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Refresh</button>
+        </div>
+    </div>
+    <div id="synthetic-chart-container" class="w-full h-80 bg-gray-900 rounded-lg p-2 flex items-center justify-center">
+        <span class="text-gray-500">Loading chart...</span>
+    </div>
+</div>
             </div>
         </div>
     </div>
-
+    <!-- ...existing code... -->
+    <!-- Add Chart.js before your main script -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- ...your existing <script> tag follows... -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>   
     <script>
         // --- DOM Elements ---
         const connectBtn = document.getElementById('connect-btn');
@@ -497,13 +561,14 @@
                     
                 case 'tick':
                     if (allTickHistory.length > 0) {
-                        logMessage(`New tick received. Live value: ${data.tick.quote}. Updating analysis charts.`, 'info');
+                        // logMessage(`New tick received. Live value: ${data.tick.quote}. Updating analysis charts.`, 'info');
                         // // Always update tickHistory and run custom analysis for live chart updates
                         // allTickHistory.push(data.tick.quote.toString());
                         // if (allTickHistory.length > totalTicksToFetch) allTickHistory.shift(); 
                         // tickHistory = allTickHistory.slice(-totalTicksToFetch);
                         if(!foundTradeConditions && !isWaitingForTradeProposal && !isWaitingForTradeOutcome){
                             fetchData();
+                            renderSyntheticChart();
                         }
                     }
                     break;
@@ -1391,13 +1456,147 @@ function formatPriceForExtraction(price, decimals) {
             logMessage('Logs cleared.', 'info');
         });
 
-        // --- Initial State ---
-        // resetAppState();
-        logMessage("Welcome! Please enter your API token and optional App ID to connect.", 'info');
+        // --- Synthetic Chart Logic ---
+    const syntheticChartContainer = document.getElementById('synthetic-chart-container');
+    const chartTypeSelect = document.getElementById('chart-type-select');
+    const refreshSyntheticChartBtn = document.getElementById('refresh-synthetic-chart');
+    const selectedSyntheticLabel = document.getElementById('selected-synthetic-label');
+    const selectedTickCountLabel = document.getElementById('selected-tick-count-label');
+    let syntheticChartInstance = null;
 
+    function updateSyntheticLabels() {
+        selectedSyntheticLabel.textContent = syntheticIndexSelect.options[syntheticIndexSelect.selectedIndex].text;
+        selectedTickCountLabel.textContent = customTickCountSelect.value;
+    }
+
+    async function fetchSyntheticChartData(symbol, count, chartType) {
+        // For candles, use ticks_history with style: "candles" and granularity: 60 (1 minute)
+        // For line, use ticks_history with style: "ticks"
+        const endpoint = 'https://api.deriv.com/api/v1/ticks_history';
+        let params = {
+            ticks_history: symbol,
+            end: 'latest',
+            count: count,
+            style: chartType === 'candles' ? 'candles' : 'ticks',
+        };
+        if (chartType === 'candles') {
+            params.granularity = 60; // 1 minute
+        }
+        // Deriv API requires POST via WebSocket, so we'll use the existing websocket if possible.
+        // For demo, fallback to a mock or skip if not connected.
+        return new Promise((resolve, reject) => {
+            if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                syntheticChartContainer.innerHTML = '<span class="text-red-400">Connect first to load chart.</span>';
+                reject('WebSocket not connected');
+                return;
+            }
+            const reqId = Math.floor(Math.random() * 1000000);
+            const request = {
+                ...params,
+                req_id: reqId
+            };
+            function onChartData(event) {
+                const data = JSON.parse(event.data);
+                if (data.echo_req && data.echo_req.req_id === reqId) {
+                    websocket.removeEventListener('message', onChartData);
+                    if (data.error) {
+                        reject(data.error.message);
+                    } else {
+                        resolve(data);
+                   
+                    }
+                }
+            }
+            websocket.addEventListener('message', onChartData);
+            websocket.send(JSON.stringify(request));
+        });
+    }
+
+    async function renderSyntheticChart() {
+        updateSyntheticLabels();
+        syntheticChartContainer.innerHTML = '<span class="text-gray-500">Loading chart...</span>';
+        const symbol = syntheticIndexSelect.value;
+        const count = parseInt(customTickCountSelect.value);
+        const chartType = chartTypeSelect.value;
+
+        try {
+            const data = await fetchSyntheticChartData(symbol, count, chartType);
+            let chartData = {};
+            let chartOptions = {};
+            if (chartType === 'candles') {
+                // Candle chart
+                const candles = data.candles || [];
+                if (!candles.length) throw new Error('No candle data');
+                chartData = {
+                    labels: candles.map(c => new Date(c.epoch * 1000).toLocaleTimeString()),
+                    datasets: [{
+                        label: 'Price',
+                        data: candles.map(c => ({ o: c.open, h: c.high, l: c.low, c: c.close })),
+                        borderColor: '#00fff7',
+                        backgroundColor: 'rgba(0,255,247,0.1)',
+                        type: 'candlestick'
+                    }]
+                };
+                chartOptions = {
+                    plugins: { legend: { display: false } },
+                    scales: { x: { display: true }, y: { display: true } }
+                };
+            } else {
+                // Line chart
+                const prices = data.history.prices || [];
+                const times = data.history.times || [];
+                // console.log('Chart API response:', data); // Add this line
+                // console.log('Prices:', prices, 'Times:', times); // Add this line
+                if (!prices.length) throw new Error('No tick data');
+                chartData = {
+                    labels: times.map(t => new Date(t * 1000).toLocaleTimeString()),
+                    datasets: [{
+                        label: 'Price',
+                        data: prices,
+                        borderColor: '#00fff7',
+                        backgroundColor: 'rgba(0,255,247,0.1)',
+                        tension: 0.3,
+                        pointRadius: 0
+                    }]
+                };
+                chartOptions = {
+                    plugins: { legend: { display: false } },
+                    scales: { x: { display: true }, y: { display: true } }
+                };
+            }
+
+            syntheticChartContainer.innerHTML = '<canvas id="syntheticChartCanvas"></canvas>';
+            const ctx = document.getElementById('syntheticChartCanvas').getContext('2d');
+            if (syntheticChartInstance) syntheticChartInstance.destroy();
+
+            // For candlestick, you need chartjs-chart-financial plugin. If not available, fallback to line.
+            if (chartType === 'candles' && window.Chart && Chart.registry.getPlugin('financial')) {
+                syntheticChartInstance = new Chart(ctx, {
+                    type: 'candlestick',
+                    data: chartData,
+                    options: chartOptions
+                });
+            } else {
+                syntheticChartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: chartData,
+                    options: chartOptions
+                });
+            }
+        } catch (err) {
+            syntheticChartContainer.innerHTML = `<span class="text-red-400">Error loading chart: ${err}</span>`;
+        }
+    }
+
+    // Update chart when controls change
+    chartTypeSelect.addEventListener('change', renderSyntheticChart);
+    customTickCountSelect.addEventListener('change', renderSyntheticChart);
+    syntheticIndexSelect.addEventListener('change', renderSyntheticChart);
+    refreshSyntheticChartBtn.addEventListener('click', renderSyntheticChart);
+
+    // Initial chart render after connection
+    if (typeof websocket !== 'undefined' && websocket && websocket.readyState === WebSocket.OPEN) {
+        renderSyntheticChart();
+    }
     </script>
-</body>
-</html>
-
-<!-- checkPercentageForTrade(myAlowestDigit, myAhighestDigit, myClowestDigit, myChighestDigit) -->
- <!-- getPredicitonNTrade() -->
+<!-- ...existing code... -->
