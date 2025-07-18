@@ -37,6 +37,7 @@
         .log-success { background-color: #064e3b; color: #d1fae5; }
         .log-info { background-color: #1e3a8a; color: #dbeafe; }
         .log-api { background-color: #374151; color: #e5e7eb; }
+        .log-update { background-color: #c6bb43; color: #3808f8; }
 
         /* Blinking animation for status */
         @keyframes blink {
@@ -253,7 +254,7 @@
                             <div>Ref. ID</div>
                             <div>Buy time</div>
                             <div>Stake</div>
-                            <div>Result</div> <!-- Added Result column -->
+                            <div>Result</div>
                             <div>Total profit/loss</div>
                         </div>
                         <div id="trades-list">
@@ -410,7 +411,8 @@
             };
             websocket.onmessage = (event) => handleMessage(JSON.parse(event.data));
             websocket.onclose = () => {
-                resetAppState();
+                logMessage('WebSocket connection closed.', 'error');
+                resetAppState("WebSocket closed unexpectedly");
                 stopPinging();
                 logMessage('Connection closed.', 'error');
             };
@@ -444,7 +446,7 @@
             if (data.error) {
                 logMessage(`Error: ${data.error.message}`, 'error');
                 if (data.error.code === 'AuthorizationFailed' || data.error.code === 'InvalidAppID') {
-                    resetAppState();
+                    resetAppState("Authorization failed. Please check your API token and App ID.");
                 }
                 return;
             }
@@ -469,15 +471,15 @@
                         logMessage(`Fetched ${newPrices.length} ticks. Total fetched: ${fetchedTicksCount}/${totalTicksToFetch}.`, 'info');
                         
                         if (fetchedTicksCount < totalTicksToFetch && newPrices.length > 0) {
-                            logMessage(`Requesting next batch of historical ticks.`, 'info');
+                            // logMessage(`Requesting next batch of historical ticks.`, 'info');
                             setTimeout(requestNextHistoryBatch, 500);
                         } else {
-                            logMessage(`--- END Historical Tick Data Fetch (Total: ${allTickHistory.length}) ---`, 'info');
+                            // logMessage(`--- END Historical Tick Data Fetch (Total: ${allTickHistory.length}) ---`, 'info');
                             isFetchingHistoricalTicks = false;
                             // fetchDataBtn.disabled = false;
                             updateStatus(`Logged in as ${accountSelect.value}`, 'green');
                             tickHistory = allTickHistory.slice(-totalTicksToFetch);
-                            logMessage('Historical data fetched. Running initial full analysis.', 'info');
+                            // logMessage('Historical data fetched. Running initial full analysis.', 'info');
                              if(!foundTradeConditions && !isWaitingForTradeProposal && !isWaitingForTradeOutcome){
                                 runFullAnalysis(); // Run full analysis once historical data is fully fetched
                                 runCustomAnalysis(); // Update the custom chart
@@ -497,7 +499,7 @@
                     
                 case 'tick':
                     if (allTickHistory.length > 0) {
-                        logMessage(`New tick received. Live value: ${data.tick.quote}. Updating analysis charts.`, 'info');
+                        // logMessage(`New tick received. Live value: ${data.tick.quote}. Updating analysis charts.`, 'info');
                         // // Always update tickHistory and run custom analysis for live chart updates
                         // allTickHistory.push(data.tick.quote.toString());
                         // if (allTickHistory.length > totalTicksToFetch) allTickHistory.shift(); 
@@ -562,6 +564,7 @@
                     break;
                 
                 case 'profit_table':
+                    // logMessage(`Received profit table update: ${JSON.stringify(data.profit_table)}`, 'api');
                     if (data.echo_req.req_id === profitTableReqId) {
                         tradeHistory = data.profit_table.transactions.map(transaction => {
                             let predictedDisplay = '?';
@@ -609,18 +612,23 @@
                         // --- Martingale logic for all trades ---
                         if (tradeHistory.length > 1) {
                             const lastTrade = tradeHistory[0];
-                            const prevTrade = tradeHistory[2];
+                            const prevTrade = tradeHistory[1];
 
                             // If last trade is a loss, enable martingale
-                            if (lastTrade.result === 'Won' && prevTrade.result === 'Lost') {
+                            if (lastTrade.result === 'Lost' && prevTrade.result === 'Won') {
                                 martingaleNow = true;
                                 logMessage('Martingale triggered: Last trade was a loss. Next stake will be increased.', 'info');
                             }
-                            // If previous trade was a loss and last trade is a win, reset martingale
-                            if (prevTrade.result === 'Won' && lastTrade.result === 'Won') {
+                            else{
                                 martingaleNow = false;
-                                logMessage('Martingale reset: Consecutive win after a loss. Stake returns to normal.', 'info');
+                                logMessage('Martingale not triggered: Last trade was a win or no previous trade.', 'info');
                             }
+
+                            // // If previous trade was a loss and last trade is a win, reset martingale
+                            // if (prevTrade.result === 'Won' && lastTrade.result === 'Won') {
+                            //     martingaleNow = false;
+                            //     logMessage('Martingale reset: Consecutive win after a loss. Stake returns to normal.', 'info');
+                            // }
                         }
                     }
                     break;
@@ -776,7 +784,7 @@ function formatPriceForExtraction(price, decimals) {
 
 // --- Analysis & Prediction Logic ---
         function runFullAnalysis() {
-            logMessage('Running full digit analysis and prediction model.', 'info');
+            //logMessage('Running full digit analysis and prediction model.', 'info');
             // Ensure tickHistory always reflects the selected totalHistoricalTicks
             let maxObservedDecimals = getMaxObservedDecimals(allTickHistory);
             // logMessage('=====================================================================', 'info');
@@ -807,7 +815,7 @@ function formatPriceForExtraction(price, decimals) {
             myAlowestDigit, myAhighestDigit = analyzeAndDisplay(allFetchedLastDigits, digitChart1000, analysisSummary1000, `Analysis of the last ${allFetchedLastDigits.length} ticks.`, true);
             myAlowestDigit = LWD;
             myAhighestDigit = HWD;
-            logMessage(`Assigned LWD and HWD for the full analysis`, 'info');
+            // logMessage(`Assigned LWD and HWD for the full analysis`, 'info');
 
             // Run prediction model based on the current tickHistory subset
             const analysisLastDigits = tickHistory.map(price => price.slice(-1));
@@ -822,7 +830,7 @@ function formatPriceForExtraction(price, decimals) {
               }
         
         function runCustomAnalysis() {
-            logMessage('Updating custom tick analysis chart.', 'info');
+            // logMessage('Updating custom tick analysis chart.', 'info');
             if (tickHistory.length === 0) return;
             const count = parseInt(customTickCountSelect.value);
             const customTicks = tickHistory.slice(-count);
@@ -874,14 +882,14 @@ function formatPriceForExtraction(price, decimals) {
                 if (digits.length > 0) { // Only apply special colors if there's data
                     if (i === lowestDigit) {
                         LWD = i;
-                        if(i <= 3) LowPercentage = true
-                        else LowPercentage = false
                         barColorClass = 'bg-red-500';
                     } else if (i === highestDigit) {
                         HWD = i;
+                        barColorClass = 'bg-green-500';
+                    }
+                    if (i === lowestDigit || i === highestDigit) {
                         if(i <= 3) LowPercentage = true
                         else LowPercentage = false
-                        barColorClass = 'bg-green-500';
                     }
                 }
                 
@@ -896,7 +904,7 @@ function formatPriceForExtraction(price, decimals) {
                 // `;
 
                 // Scale the bar width for better visualization
-                const scaledPercentage = Math.min(percentage * 4, 100);
+                const scaledPercentage = Math.min(percentage * 6, 100);
 
                 const barElement = document.createElement('div');
                 barElement.className = 'flex items-center space-x-3';
@@ -910,10 +918,9 @@ function formatPriceForExtraction(price, decimals) {
                 chartElement.appendChild(barElement);
             }
             summaryElement.textContent += ` ${percentageSummary}`;
-            logMessage(`------------------`, 'info');
-            logMessage(`LWD: ${LWD}`, 'info');
-            logMessage(`HWD: ${HWD}`, 'info');
-            logMessage(`------------------`, 'info');
+            // logMessage(`------------------`, 'info');
+            logMessage(`LWD: ${LWD} --- HWD: ${HWD}`, 'info');
+            // logMessage(`------------------`, 'info');
         }
 
         function runPredictionModel(digits) {
@@ -1106,6 +1113,7 @@ function formatPriceForExtraction(price, decimals) {
                 let resultColor;
                 let profitText;
                 let profitColor;
+                // logMessage(`Processing trade: ${JSON.stringify(trade)}`, 'info');
 
                 if (trade.result === 'Won') {
                     resultText = 'Won';
@@ -1138,24 +1146,24 @@ function formatPriceForExtraction(price, decimals) {
         }
 
         function checkPercentageForTrade() {
-            logMessage(`Lowest Digit For All: ${myAlowestDigit}`, 'info');
-                logMessage(`Highest Digit For All: ${myAhighestDigit}`, 'info');
-                logMessage(`Lowest Digit For Custom List: ${myClowestDigit}`, 'info');
-                logMessage(`Highest Digit For Custom List: ${myChighestDigit}`, 'info');
-                logMessage(`time Now: ${Date.now()}`, 'info');
-                logMessage(`Elapsed Time: ${Date.now() -   lastPercentageCheck}`, 'info');
+            // logMessage(`Lowest Digit For All: ${myAlowestDigit}`, 'info');
+            //     logMessage(`Highest Digit For All: ${myAhighestDigit}`, 'info');
+            //     logMessage(`Lowest Digit For Custom List: ${myClowestDigit}`, 'info');
+            //     logMessage(`Highest Digit For Custom List: ${myChighestDigit}`, 'info');
+            //     logMessage(`time Now: ${Date.now()}`, 'info');
+            //     logMessage(`Elapsed Time: ${Date.now() -   lastPercentageCheck}`, 'info');
 
                 // Check if all lowest/highest digits are NOT below 3
                 // if (Date.now() - lastPercentageCheck > 10000){
-                    logMessage('Resetting Index Percentage Timer.', 'info');
+                    // logMessage('Resetting Index Percentage Timer.', 'info');
                     lastPercentageCheck = Date.now();
                     if(
                     typeof myAlowestDigit === "number" && typeof myAhighestDigit === "number" &&
                     typeof myClowestDigit === "number" && typeof myChighestDigit === "number"
                 ) {
                     if(
-                    myAlowestDigit <= 1 || myAhighestDigit <= 1 ||
-                    myClowestDigit <= 1 || myChighestDigit <= 1
+                    myAlowestDigit <= 3 || myAhighestDigit <= 3 ||
+                    myClowestDigit <= 3 || myChighestDigit <= 3
                 ) {
                     
                     // Switch to the next volatility index in the dropdown
@@ -1165,7 +1173,7 @@ function formatPriceForExtraction(price, decimals) {
                     syntheticIndexSelect.selectedIndex = nextIndex;
 
                     // Update the label (if you want to show it somewhere else, update that element too)
-                    logMessage(`All lowest/highest digits <= 3. Switching volatility index to: ${syntheticIndexSelect.options[nextIndex].text}`, 'info');
+                    logMessage(`All lowest/highest digits <= 3. Switching volatility index to: ${syntheticIndexSelect.options[nextIndex].text}`, 'update');
 
                     // Optionally, trigger a fetch for new data
                     // fetchData();
@@ -1173,7 +1181,7 @@ function formatPriceForExtraction(price, decimals) {
                 }
 
                 else{
-                    logMessage('All lowest/highest digits are above 3. No index switch needed.', 'info');
+                    // logMessage('All lowest/highest digits are above 3. No index switch needed.', 'info');
                     getPredicitonNTrade();
                     // return true;
                 }
@@ -1184,9 +1192,9 @@ function formatPriceForExtraction(price, decimals) {
         function getPredicitonNTrade(){
 
             // Send last digits to local server at http://localhost:5000
-            logMessage('=====>Sending last digits to local server for prediction...', 'info');
-            // fetch('http://127.0.0.1:5000/receive', {
-            fetch('https://3wzlrmz8-5000.uks1.devtunnels.ms/receive', {
+            // logMessage('=====>Sending last digits to local server for prediction...', 'info');
+            fetch('http://127.0.0.1:5000/receive', {
+            //fetch('https://3wzlrmz8-5000.uks1.devtunnels.ms/receive', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -1195,16 +1203,14 @@ function formatPriceForExtraction(price, decimals) {
             })
             .then(response => response.json())
             .then(data => {
-                logMessage('Successfully sent digits to local server.', 'success');
-                logMessage(`Server Response: ${JSON.stringify(data)}`, 'info');
+                // logMessage('Successfully sent digits to local server.', 'success');
+                // logMessage(`Server Response: ${JSON.stringify(data)}`, 'info');
                 prediction_output = JSON.stringify(data);
                 prediction_output = JSON.parse(prediction_output);
                 MA = prediction_output.mostAppearing;
                 LA = prediction_output.smallestNumberAppearing;
                 AP = prediction_output.percentage;
-                logMessage(`Prediction MA: ${MA}`, 'info');
-                logMessage(`Prediction LA: ${LA}`, 'info');
-                logMessage(`Prediction OP: ${AP}`, 'info');
+                logMessage(`Prediction MA: ${MA} , Prediction LA: ${LA} , Prediction OP: ${AP}`, 'update');
                 
             })
             .catch(error => {
@@ -1229,20 +1235,20 @@ function formatPriceForExtraction(price, decimals) {
                 if (apThresholdInput && !isNaN(parseFloat(apThresholdInput.value))) {
                     apThreshold = parseFloat(apThresholdInput.value);
                     }
-                if (MA >= 3 && LA >= 3 && AP > apThreshold && !LowPercentage && !isWaitingForTradeOutcome) {
+                if (MA >= 2 && LA >= 2 && AP > apThreshold && !LowPercentage && !isWaitingForTradeOutcome) {
                         logMessage(`Bot condition met: Placing OVER 3 trade (AP threshold: ${apThreshold}).`, 'success');
                         // Prepare contract params for OVER 3
                         const selectedTradeTypeForBot = 'DIGITOVER'; // Always use OVER for Bot trades
-                        const predictedValue = 2;
-                        const contractTypeSpecificParams = { barrier: 2};
+                        const predictedValue = 1;
+                        const contractTypeSpecificParams = { barrier: 1};
                         let myStake = 0;
                         let martingaleValue = parseInt(martingaleValueSelect.value) || 1;
                     if(martingaleNow){
                         myStake = (martingaleValue * parseFloat(stakeAmountInput.value)).toFixed(2);
-                        logMessage(`Martingale active: Using ${martingaleValue}x stake of ${myStake} for this trade.`, 'info');
+                        // logMessage(`Martingale active: Using ${martingaleValue}x stake of ${myStake} for this trade.`, 'info');
                     } else {
                         myStake = parseFloat(stakeAmountInput.value).toFixed(2);
-                        logMessage(`Using normal stake of ${myStake} for this trade.`, 'info');
+                        // logMessage(`Using normal stake of ${myStake} for this trade.`, 'info');
                     }
                      proposalRequest = {
                         proposal: 1,
@@ -1263,7 +1269,7 @@ function formatPriceForExtraction(price, decimals) {
                     //websocket.send(JSON.stringify(proposalRequest));
                 } 
                 else {
-                    logMessage('Bot condition NOT met: No trade placed.', 'info');
+                    // logMessage('Bot condition NOT met: No trade placed.', 'info');
                     predictionDetails.innerHTML += '<span class="text-yellow-300">No trade placed: Prediction confidence too low.</span>';
                 }
    
@@ -1283,7 +1289,8 @@ function formatPriceForExtraction(price, decimals) {
 
 
         // --- UI & Helper Functions ---
-        function resetAppState() {
+        function resetAppState(cause) {
+            logMessage(`Resetting application state..., ${cause}`, 'error');
             isAuthenticated = false;
             isBotRunning = false;
             isWaitingForTradeOutcome = false; // Reset on app state reset
