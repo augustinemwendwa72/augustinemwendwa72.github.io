@@ -1,281 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Deriv Digit Analyzer & Trading Bot</title>
-    <!-- Tailwind CSS for styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Fonts for a clean look -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        /* Custom styles to complement Tailwind */
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #111827; /* bg-gray-900 */
-            color: #d1d5db; /* text-gray-300 */
-        }
-        .card {
-            background-color: #1f2937; /* bg-gray-800 */
-            border: 1px solid #374151; /* border-gray-700 */
-            border-radius: 0.75rem; /* rounded-xl */
-            padding: 1.5rem; /* p-6 */
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-        }
-        .log-message {
-            font-family: 'monospace';
-            font-size: 0.8rem;
-            padding: 0.25rem 0.5rem;
-            border-radius: 0.25rem;
-            margin-bottom: 0.25rem;
-            white-space: pre-wrap;
-            word-break: break-all;
-        }
-        .log-error { background-color: #450a0a; color: #fecaca; }
-        .log-success { background-color: #064e3b; color: #d1fae5; }
-        .log-info { background-color: #1e3a8a; color: #dbeafe; }
-        .log-api { background-color: #374151; color: #e5e7eb; }
-        .log-update { background-color: #c6bb43; color: #3808f8; }
 
-        /* Blinking animation for status */
-        @keyframes blink {
-            50% { opacity: 0.5; }
-        }
-        .blinking {
-            animation: blink 1s linear infinite;
-        }
-
-        .trade-item {
-            display: grid;
-            /* Updated grid-template-columns: Type, Ref. ID, Buy time, Stake, Result, Total Profit/Loss */
-            grid-template-columns: 0.8fr 1.2fr 1fr 0.8fr 0.7fr 1.2fr;
-            gap: 8px;
-            padding: 8px;
-            border-bottom: 1px solid #374151;
-            align-items: center;
-        }
-        .trade-item:last-child {
-            border-bottom: none;
-        }
-        .trade-header {
-            font-weight: bold;
-            color: #9ca3af; /* gray-400 */
-            text-align: left;
-        }
-    </style>
-</head>
-<body class="p-4 md:p-8">
-    <div class="max-w-7xl mx-auto space-y-8">
-        <!-- Header Section -->
-        <header class="text-center">
-            <h1 class="text-3xl md:text-4xl font-bold text-white">Deriv Digit Analyzer & Trading Bot</h1>
-            <p class="text-gray-400 mt-2">Analyze historical digit patterns and automate trades based on predictions.</p>
-        </header>
-        
-        <!-- Login and Account Selection -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="card">
-                <h2 class="text-xl font-semibold text-white mb-4">1. Login</h2>
-                <div class="space-y-4">
-                    <div class="relative">
-                        <input type="password" id="api-token" placeholder="Enter your Deriv API Token" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                        <button id="toggle-password" class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-white">
-                            <svg id="eye-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                                <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
-                            </svg>
-                            <svg id="eye-off-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" viewBox="0 0 20 20" fill="currentColor">
-                               <path fill-rule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 10 0 00-4.512 1.074L3.707 2.293zM10 12a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
-                                <path d="M2 4.272l.943.943A10.072 10.072 0 00.458 10c1.274 4.057 5.022 7 9.542 7 .848 0 1.67-.11 2.454-.317l.734.734a1 1 0 101.414-1.414L3.414 2.858A1 1 0 002 4.272zM14 10a4 4 0 11-8 0 4 4 0 018 0z" />
-                            </svg>
-                        </button>
-                    </div>
-                     <input type="text" id="app-id" placeholder="Enter Deriv App ID (Optional)" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                    <button id="connect-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors">Connect</button>
-                </div>
-            </div>
-            <div class="card">
-                <h2 class="text-xl font-semibold text-white mb-4">2. Status & Account</h2>
-                 <div id="status-indicator" class="flex items-center space-x-3 p-3 rounded-lg bg-gray-900 mb-4">
-                    <div id="status-light" class="w-4 h-4 rounded-full bg-red-500"></div>
-                    <span id="status-text" class="font-semibold text-white">Disconnected</span>
-                </div>
-                <div id="account-selection-card" class="hidden">
-                    <label for="account-select" class="block text-sm font-medium text-gray-300 mb-1">Select Account</label>
-                    <select id="account-select" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"></select>
-                    <div id="account-balance" class="mt-3 text-lg font-bold text-green-400">Balance: ---</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main Content Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            <!-- Left Column: Controls -->
-            <div class="lg:col-span-1 space-y-6">
-                <!-- Bot Configuration Card -->
-                <div id="bot-controls-card" class="card hidden">
-                    <h2 class="text-xl font-semibold text-white mb-4">3. Bot Configuration</h2>
-                    <div class="space-y-4">
-                        <div>
-                            <label for="total-historical-ticks" class="block text-sm font-medium text-gray-300 mb-1">Total Historical Ticks to Fetch</label>
-                            <select id="total-historical-ticks" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                                <option value="1000">Last 1,000</option>
-                                <option value="500">Last 500</option>
-                                <option value="2000">Last 2,000</option>
-                                <option value="5000">Last 5,000</option>
-                            </select>
-                        </div>
-                         <div>
-                            <label for="synthetic-index" class="block text-sm font-medium text-gray-300 mb-1">Synthetic Index</label>
-                            <select id="synthetic-index" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                                <option value="R_10">Volatility 10 Index</option>
-                                <option value="1HZ10V">1HZ 10 Index</option>
-                                <option value="R_25">Volatility 25 Index</option>
-                                <option value="1HZ25V">1HZ 25 Index</option>
-                                <option value="R_50">Volatility 50 Index</option>
-                                <option value="1HZ50V">1HZ 50 Index</option>
-                                <option value="R_75">Volatility 75 Index</option>
-                                <option value="1HZ75V">1HZ 75 Index</option>
-                                <option value="R_100">Volatility 100 Index</option>
-                                <option value="1HZ100V">1HZ 100 Index</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label for="trade-type" class="block text-sm font-medium text-gray-300 mb-1">Trade Type</label>
-                            <select id="trade-type" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                                <option value="Bot">Bot (Auto Select)</option>
-                                <option value="DIGITMATCH">Matches</option>
-                                <option value="DIGITDIFF">Differs</option>
-                                <option value="DIGITOVER">Over</option>
-                                <option value="DIGITUNDER">Under</option>
-                                <option value="DIGITODD">Even</option>
-                                <option value="DIGITEVEN">Odd</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label for="trade-tick-duration" class="block text-sm font-medium text-gray-300 mb-1">Trade Duration (Ticks)</label>
-                            <select id="trade-tick-duration" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                                <option value="1">1 Tick</option>
-                                <option value="2">2 Ticks</option>
-                                <option value="3">3 Ticks</option>
-                                <option value="4">4 Ticks</option>
-                                <option value="5">5 Ticks</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label for="martingale-value" class="block text-sm font-medium text-gray-300 mb-1">Martingale Multiplier</label>
-                            <select id="martingale-value" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                                <option value="1">1x</option>
-                                <option value="2">2x</option>
-                                <option value="3">3x</option>
-                                <option value="4">4x</option>
-                                <option value="5">5x</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label for="ap-threshold" class="block text-sm font-medium text-gray-300 mb-1">AP Threshold (0.0 - 1.0)</label>
-                            <input type="number" id="ap-threshold" value="0.3" min="0" max="1" step="0.01" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                            <p class="text-xs text-gray-400 mt-1">Minimum AP (Average Probability) required for bot to place a trade. Default: 0.3</p>
-                        </div>
-
-                        <div>
-                             <label for="stake-amount" class="block text-sm font-medium text-gray-300 mb-1">Stake Amount (USD)</label>
-                             <input type="number" id="stake-amount" value="0.35" step="0.01" class="w-full bg-gray-900 border border-gray-700 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                        </div>
-                        <button id="fetch-data-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition-colors">Fetch & Analyze</button>
-                        <div class="flex space-x-4">
-                             <button id="start-bot-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>Start Bot</button>
-                             <button id="stop-bot-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>Stop Bot</button>
-                        </div>
-                    </div>
-                </div>
-                 <!-- Prediction Card -->
-                <div id="prediction-card" class="card hidden">
-                    <h2 class="text-xl font-semibold text-white mb-4">Prediction Model</h2>
-                     <div class="bg-gray-900 p-4 rounded-lg">
-                        <h3 class="text-lg font-semibold text-white">Predicted Next Digits/Parity Sequence</h3>
-                        <p id="prediction-sequence" class="text-2xl font-bold text-emerald-400 tracking-widest mt-2">[ ? ? ? ]</p>
-                        <p id="prediction-details" class="text-sm text-gray-400 mt-1">
-                            Predicted Value: --, Confidence: --%, Type: --
-                        </p>
-                    </div>
-                </div>
-                 <!-- Financial Risk Disclaimer -->
-                <div class="card bg-yellow-900/50 border-yellow-700">
-                    <h3 class="font-bold text-yellow-300">Disclaimer: High Financial Risk</h3>
-                    <p class="text-yellow-400 text-sm mt-2">Trading involves substantial risk and is not suitable for all investors. This tool is for educational and experimental purposes. Past performance is not indicative of future results. You are solely responsible for any financial losses.</p>
-                </div>
-            </div>
-
-            <!-- Right Column: Data & Logs -->
-            <div class="lg:col-span-2 space-y-6">
-                <!-- Digit Analysis Card (1000 Ticks) -->
-                <div class="card">
-                    <h2 class="text-xl font-semibold text-white mb-4">Last Digit Analysis (All Fetched Ticks)</h2>
-                    <p id="analysis-summary-1000" class="text-gray-400 text-sm mb-4">Fetch data to see distribution.</p>
-                    <div id="digit-chart-1000" class="space-y-2"></div>
-                </div>
-
-                <!-- Digit Analysis Card (Custom) -->
-                <div class="card">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-semibold text-white">Last Digit Analysis (Current View)</h2>
-                        <select id="custom-tick-count" class="bg-gray-900 border border-gray-700 text-white rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                            <option value="10">10 Ticks</option>
-                            <option value="20">20 Ticks</option>
-                            <option value="50">50 Ticks</option>
-                            <option value="100" selected>100 Ticks</option>
-                            <option value="200">200 Ticks</option>
-                            <option value="500">500 Ticks</option>
-                        </select>
-                    </div>
-                    <p id="analysis-summary-custom" class="text-gray-400 text-sm mb-4">Fetch data to see distribution.</p>
-                    <div id="digit-chart-custom" class="space-y-2"></div>
-                </div>
-
-                <!-- Previous Trades Card -->
-                <div class="card">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-semibold text-white">Previous Trades</h2>
-                        <select id="num-trades-to-show" class="bg-gray-900 border border-gray-700 text-white rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                            <option value="10" selected>Last 10</option>
-                            <option value="50">Last 50</option>
-                            <option value="100">Last 100</option>
-                            <option value="all">All</option>
-                        </select>
-                    </div>
-                    <div id="trade-history-container" class="w-full h-64 bg-gray-900 rounded-lg p-3 overflow-y-auto">
-                        <div class="trade-item trade-header">
-                            <div>Type</div>
-                            <div>Ref. ID</div>
-                            <div>Buy time</div>
-                            <div>Stake</div>
-                            <div>Result</div>
-                            <div>Total profit/loss</div>
-                        </div>
-                        <div id="trades-list">
-                            <!-- Trade items will be rendered here -->
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Logs Card -->
-                <div class="card">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-semibold text-white">Logs</h2>
-                        <button id="clear-logs-btn" class="bg-gray-600 hover:bg-gray-700 text-white text-sm font-bold py-2 px-3 rounded-lg transition-colors">Clear Logs</button>
-                    </div>
-                    <div id="logs-container" class="w-full h-96 bg-gray-900 rounded-lg p-3 overflow-y-auto"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
         // --- DOM Elements ---
         const connectBtn = document.getElementById('connect-btn');
         const apiTokenInput = document.getElementById('api-token');
@@ -317,7 +40,7 @@
         const clearLogsBtn = document.getElementById('clear-logs-btn');
         const tradeTickDurationSelect = document.getElementById('trade-tick-duration');
         const martingaleValueSelect = document.getElementById('martingale-value');
-
+        let symbol = '';
 
         // --- State Variables ---
         let websocket;
@@ -362,7 +85,7 @@
 
         const DEFAULT_DERIV_APP_ID = 65499;
         const PING_INTERVAL_MS = 20000;
-        const MAX_TICKS_PER_API_CALL = 1000;
+        const MAX_TICKS_PER_API_CALL = 5000;
         const MAX_PROFIT_TABLE_LIMIT = 250; // This is a hard limit by Deriv API, not configurable by dropdown directly.
         const CONFIDENCE_THRESHOLD_EVEN_ODD = 51; // New threshold for Even/Odd
         const CONFIDENCE_THRESHOLD_OVER_UNDER = 62.5; // New threshold for Over/Under
@@ -384,10 +107,15 @@
         let MA = 0;
         let LA = 0;
         let AP = 0;
+        let durationWhole = 0;
+        let durationPrediction = 0;
         let formattedData = JSON.stringify({});
         let proposalRequest = null;
         let selectedTradeType = null; // This will be set based on the trade type selected by the user
         let foundTradeConditions = false;
+
+        let waitingForServerRes = false;
+    
 
         function connect() {
             const apiToken = apiTokenInput.value;
@@ -504,7 +232,7 @@
                         // allTickHistory.push(data.tick.quote.toString());
                         // if (allTickHistory.length > totalTicksToFetch) allTickHistory.shift(); 
                         // tickHistory = allTickHistory.slice(-totalTicksToFetch);
-                        if(!foundTradeConditions && !isWaitingForTradeProposal && !isWaitingForTradeOutcome){
+                        if(!foundTradeConditions && !isWaitingForTradeProposal && !isWaitingForTradeOutcome && !waitingForServerRes){
                             fetchData();
                         }
                     }
@@ -613,12 +341,19 @@
                         if (tradeHistory.length > 1) {
                             const lastTrade = tradeHistory[0];
                             const prevTrade = tradeHistory[1];
+                            const prevTrade2 = tradeHistory[2];
 
                             // If last trade is a loss, enable martingale
-                            if (lastTrade.result === 'Lost' && prevTrade.result === 'Won') {
+                            if (lastTrade.result === 'Lost' && prevTrade.result === 'Won' && prevTrade2.result === 'Won') {
                                 martingaleNow = true;
-                                logMessage('Martingale triggered: Last trade was a loss. Next stake will be increased.', 'info');
+                                martingaleStage = 1; // Reset martingale stage
+                                logMessage('Martingale stage 1.', 'info');
                             }
+                            // else if (lastTrade.result === 'Lost' && prevTrade.result === 'Lost' && prevTrade2.result === 'Won'){
+                            //     martingaleNow = true;
+                            //     martingaleStage = 2; // Move to stage 2 if already in martingale
+                            //     logMessage('Martingale stage 2.', 'info');
+                            // }
                             else{
                                 martingaleNow = false;
                                 logMessage('Martingale not triggered: Last trade was a win or no previous trade.', 'info');
@@ -707,7 +442,7 @@
         }
 
         function requestNextHistoryBatch() {
-            const symbol = syntheticIndexSelect.value;
+            symbol = syntheticIndexSelect.value;
             const countForThisCall = Math.min(MAX_TICKS_PER_API_CALL, totalTicksToFetch - fetchedTicksCount);
             
             if (countForThisCall <= 0) {
@@ -1101,6 +836,7 @@ function formatPriceForExtraction(price, decimals) {
 
             if (tradesToDisplay.length === 0) {
                 tradesList.innerHTML = '<div class="text-center text-gray-500 py-4">No trades yet.</div>';
+                renderProfitChart([]); // Clear chart if no trades
                 return;
             }
 
@@ -1143,7 +879,59 @@ function formatPriceForExtraction(price, decimals) {
                 `;
                 tradesList.appendChild(tradeElement);
             });
+
+            // Render the profit chart after rendering trades
+            renderProfitChart(tradesToDisplay);
         }
+
+        // 3. Profit chart rendering logic
+    let profitChart; // Chart.js instance
+
+    function renderProfitChart(trades) {
+        const ctx = document.getElementById('profit-chart').getContext('2d');
+        if (!trades || trades.length === 0) {
+            if (profitChart) profitChart.destroy();
+            return;
+        }
+
+        // Prepare data: cumulative profit over time
+        let labels = [];
+        let data = [];
+        let cumulativeProfit = 0;
+        trades.slice().reverse().forEach(trade => {
+            cumulativeProfit += trade.profit;
+            labels.push(trade.timestamp);
+            data.push(cumulativeProfit);
+        });
+
+        // Destroy previous chart if exists
+        if (profitChart) profitChart.destroy();
+
+        profitChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Cumulative Profit (USD)',
+                    data: data,
+                    borderColor: 'rgb(34,197,94)',
+                    backgroundColor: 'rgba(34,197,94,0.2)',
+                    fill: true,
+                    tension: 0.2,
+                    pointRadius: 2,
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: { display: true }
+                },
+                scales: {
+                    x: { title: { display: true, text: 'Time' } },
+                    y: { title: { display: true, text: 'Profit (USD)' } }
+                }
+            }
+        });
+    }
 
         function checkPercentageForTrade() {
             // logMessage(`Lowest Digit For All: ${myAlowestDigit}`, 'info');
@@ -1182,7 +970,9 @@ function formatPriceForExtraction(price, decimals) {
 
                 else{
                     // logMessage('All lowest/highest digits are above 3. No index switch needed.', 'info');
+                    waitingForServerRes = true;
                     getPredicitonNTrade();
+                    waitingForServerRes = false
                     // return true;
                 }
             }
@@ -1190,27 +980,35 @@ function formatPriceForExtraction(price, decimals) {
         // }
 
         function getPredicitonNTrade(){
-
+            let mypredRequest = {"index_name": symbol}
             // Send last digits to local server at http://localhost:5000
             // logMessage('=====>Sending last digits to local server for prediction...', 'info');
-            fetch('http://127.0.0.1:5000/receive', {
+            fetch('http://127.0.0.1:5001/receive', {
             //fetch('https://3wzlrmz8-5000.uks1.devtunnels.ms/receive', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(formattedData)
+                body: JSON.stringify(mypredRequest)
+                // body: JSON.stringify(formattedData)
             })
             .then(response => response.json())
             .then(data => {
-                // logMessage('Successfully sent digits to local server.', 'success');
-                // logMessage(`Server Response: ${JSON.stringify(data)}`, 'info');
+                logMessage('Successfully sent digits to local server.', 'success');
+                logMessage(`Server Response: ${JSON.stringify(data)}`, 'info');
                 prediction_output = JSON.stringify(data);
                 prediction_output = JSON.parse(prediction_output);
                 MA = prediction_output.mostAppearing;
                 LA = prediction_output.smallestNumberAppearing;
-                AP = prediction_output.percentage;
-                logMessage(`Prediction MA: ${MA} , Prediction LA: ${LA} , Prediction OP: ${AP}`, 'update');
+                AP = (prediction_output.probability_all_over_3)* 100; // Convert to percentage
+                durationWhole = prediction_output.duration_ms;
+                durationPrediction = prediction_output.prediction_ms;
+                logMessage(`Prediction Duration Whole: ${durationWhole} ms, Prediction Duration Prediction: ${durationPrediction} ms`, 'update');
+                logMessage(`Prediction MA: ${MA}, LA: ${LA}, AP: ${(AP).toFixed(2)}%`, 'update');
+                // MA = prediction_output.mostAppearing;
+                // LA = prediction_output.smallestNumberAppearing;
+                // AP = prediction_output.percentage;
+                // logMessage(`Prediction MA: ${MA} , Prediction LA: ${LA} , Prediction OP: ${AP}`, 'update');
                 
             })
             .catch(error => {
@@ -1231,20 +1029,21 @@ function formatPriceForExtraction(price, decimals) {
                 // Place trade if conditions are met
                 // Get AP threshold from user input (default 0.3)
                 const apThresholdInput = document.getElementById('ap-threshold');
-                let apThreshold = 0.5;
-                if (apThresholdInput && !isNaN(parseFloat(apThresholdInput.value))) {
-                    apThreshold = parseFloat(apThresholdInput.value);
-                    }
-                if (MA >= 2 && LA >= 2 && AP > apThreshold && !LowPercentage && !isWaitingForTradeOutcome) {
-                        logMessage(`Bot condition met: Placing OVER 3 trade (AP threshold: ${apThreshold}).`, 'success');
-                        // Prepare contract params for OVER 3
+                let apThreshold = 0.8;
+                if(AP > 12.0){
+                // if (apThresholdInput && !isNaN(parseFloat(apThresholdInput.value))) {
+                //     apThreshold = parseFloat(apThresholdInput.value);
+                //     }
+                // if (MA > 3 && LA > 3 && AP > apThreshold && !LowPercentage && !isWaitingForTradeOutcome) {
+                //         logMessage(`Bot condition met: Placing OVER 3 trade (AP threshold: ${apThreshold}).`, 'success');
+                //         // Prepare contract params for OVER 3
                         const selectedTradeTypeForBot = 'DIGITOVER'; // Always use OVER for Bot trades
-                        const predictedValue = 1;
-                        const contractTypeSpecificParams = { barrier: 1};
+                        const predictedValue = 2;
+                        const contractTypeSpecificParams = { barrier: 2};
                         let myStake = 0;
                         let martingaleValue = parseInt(martingaleValueSelect.value) || 1;
                     if(martingaleNow){
-                        myStake = (martingaleValue * parseFloat(stakeAmountInput.value)).toFixed(2);
+                        myStake = (martingaleValue * martingaleStage * parseFloat(stakeAmountInput.value)).toFixed(2);
                         // logMessage(`Martingale active: Using ${martingaleValue}x stake of ${myStake} for this trade.`, 'info');
                     } else {
                         myStake = parseFloat(stakeAmountInput.value).toFixed(2);
@@ -1264,6 +1063,7 @@ function formatPriceForExtraction(price, decimals) {
                     };
                     // logMessage(`Requesting trade proposal with params: ${JSON.stringify(proposalRequest)}`, 'api');
                     foundTradeConditions = true;
+                    AP = 0; // Reset AP after placing trade
                     requestTradeProposal(proposalRequest);
                     // isWaitingForTradeOutcome = true;
                     //websocket.send(JSON.stringify(proposalRequest));
@@ -1334,12 +1134,21 @@ function formatPriceForExtraction(price, decimals) {
             statusLight.classList.toggle('blinking', isBlinking);
         }
 
+        // Autoscroll logic
+        const logsAutoscrollCheckbox = document.getElementById('logs-autoscroll');
+        let logsAutoscrollEnabled = true;
+        logsAutoscrollCheckbox.addEventListener('change', () => {
+            logsAutoscrollEnabled = logsAutoscrollCheckbox.checked;
+        });
+
         function logMessage(message, type = 'info') {
             const logElement = document.createElement('div');
             logElement.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
             logElement.className = `log-message log-${type}`;
             logsContainer.appendChild(logElement);
-            logsContainer.scrollTop = logsContainer.scrollHeight;
+            if (logsAutoscrollEnabled) {
+                logsContainer.scrollTop = logsContainer.scrollHeight;
+            }
         }
         
         // --- Event Listeners ---
@@ -1402,9 +1211,4 @@ function formatPriceForExtraction(price, decimals) {
         // resetAppState();
         logMessage("Welcome! Please enter your API token and optional App ID to connect.", 'info');
 
-    </script>
-</body>
-</html>
-
-<!-- checkPercentageForTrade(myAlowestDigit, myAhighestDigit, myClowestDigit, myChighestDigit) -->
- <!-- getPredicitonNTrade() -->
+    
